@@ -1,6 +1,6 @@
 {
   "name": "smtp-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Create custom SMTP servers on the fly",
   "main": "lib/smtp-server.js",
   "scripts": {
@@ -8,9 +8,7 @@
   },
   "author": "Andris Reinman",
   "license": "MIT",
-  "dependencies": {
-    "joi": "^5.1.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "chai": "^2.0.0",
     "grunt": "^0.4.5",
