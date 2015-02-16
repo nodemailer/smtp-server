@@ -2,6 +2,9 @@
 
 Create SMTP server instances on the fly. This is not a full-blown server application like [Haraka](https://haraka.github.io/) but an easy way to add custom SMTP listeners to your app. This module is the successor for the server part of the (now deprecated) SMTP module [simplesmtp](https://www.npmjs.com/package/simplesmtp). For matching SMTP client see [smtp-connection](https://www.npmjs.com/package/smtp-connection).
 
+[![Build Status](https://secure.travis-ci.org/andris9/smtp-server.svg)](http://travis-ci.org/andris9/Nodemailer)
+<a href="http://badge.fury.io/js/nodemailer"><img src="https://badge.fury.io/js/smtp-server.svg" alt="NPM version" height="18"></a>
+
 Requires Node v0.12 or iojs. The module does not run on Node v0.10 as it uses [Buffer.compare](http://nodejs.org/api/buffer.html#buffer_class_method_buffer_compare_buf1_buf2) and [TLSSocket](http://nodejs.org/api/tls.html#tls_new_tls_tlssocket_socket_options).
 
 > **Beware!** This module is not battle tested (yet), I wrote it from scratch to replace simplesmtp server, so I might have overlooked some corner cases. [File an issue](https://github.com/andris9/smtp-server/issues) if you find anything strange going on when using this module.
