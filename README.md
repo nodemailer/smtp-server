@@ -174,7 +174,7 @@ Where
 var server = new SMTPServer({
     onMailFrom = function(address, session, callback){
         if(address.address !== 'allowed@example.com'){
-            return new Error('Only allowed@example.com is allowed to send mail');
+            return callback(new Error('Only allowed@example.com is allowed to send mail'));
         }
         return callback(); // Accept the address
     }
@@ -202,7 +202,7 @@ Where
 var server = new SMTPServer({
     onRcptTo = function(address, session, callback){
         if(address.address !== 'allowed@example.com'){
-            return new Error('Only allowed@example.com is allowed to receive mail');
+            return callback(new Error('Only allowed@example.com is allowed to receive mail'));
         }
         return callback(); // Accept the address
     }
