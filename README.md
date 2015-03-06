@@ -172,7 +172,7 @@ Where
 
 ```javascript
 var server = new SMTPServer({
-    onMailFrom = function(address, session, callback){
+    onMailFrom: function(address, session, callback){
         if(address.address !== 'allowed@example.com'){
             return callback(new Error('Only allowed@example.com is allowed to send mail'));
         }
@@ -200,7 +200,7 @@ Where
 
 ```javascript
 var server = new SMTPServer({
-    onRcptTo = function(address, session, callback){
+    onRcptTo: function(address, session, callback){
         if(address.address !== 'allowed@example.com'){
             return callback(new Error('Only allowed@example.com is allowed to receive mail'));
         }
@@ -227,7 +227,7 @@ Where
 
 ```javascript
 var server = new SMTPServer({
-    onData = function(stream, session, callback){
+    onData: function(stream, session, callback){
         stream.pipe(process.stdout); // print message to console
         stream.on('end', callback);
     }
