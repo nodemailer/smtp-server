@@ -135,7 +135,7 @@ If you support multiple authentication mechanisms, then you can check the used m
 var server = new SMTPServer({
     authMethods: ['XOAUTH2'], // XOAUTH2 is not enabled by default
     onAuth: function(auth, session, callback){
-        if(auth.method !== 'XOAUTH'){
+        if(auth.method !== 'XOAUTH2'){
             // should never occur in this case as only XOAUTH2 is allowed
             return callback(new Error('Expecting XOAUTH2'));
         }
