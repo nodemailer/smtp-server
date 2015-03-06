@@ -21,7 +21,7 @@ Install with npm
 
 Require in your script
 
-    var SMTPServer = require('smtp-server');
+    var SMTPServer = require('smtp-server').SMTPServer;
 
 ### Create SMTPServer instance
 
