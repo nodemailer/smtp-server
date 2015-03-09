@@ -262,7 +262,7 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             disabledCommands: ['STARTTLS'],
-            loggers: false,
+            logger: false,
             socketTimeout: 2 * 1000
         });
 
