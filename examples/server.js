@@ -1,5 +1,6 @@
 'use strict';
 
+// Replace '../lib/smtp-server' with 'smtp-server' when running this script outside this directory
 var SMTPServer = require('../lib/smtp-server').SMTPServer;
 
 var SERVER_PORT = 1337;

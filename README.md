@@ -37,7 +37,8 @@ Where
     * **options.banner** optional greeting message. This message is appended to the default ESMTP response.
     * **options.authMethods** optional array of allowed authentication methods, defaults to `['PLAIN', 'LOGIN']`. Only the methods listed in this array are allowed, so if you set it to `['XOAUTH2']` then PLAIN and LOGIN are not available. Use `['PLAIN', 'LOGIN', 'XOAUTH2']` to allow all three. Authentication is only allowed in secure mode (either the server is started with `secure: true` option or STARTTLS command is used)
     * **options.disabledCommands** optional array of disabled commands (see all supported commands [here](#commands)). For example if you want to disable authentication, use `['AUTH']` as this value. If you want to allow authentication in clear text, set it to `['STARTTLS']`.
-    * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. By default logs to console
+    * **hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
+    * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. By default logs to console. If set to `false` then nothing is logged
     * **options.maxClients** sets the maximum number of concurrently connected clients, defaults to `Infinity`
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
     * **onAuth** is the callback to handle authentications (see details [here](#handling-authentication))

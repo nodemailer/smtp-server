@@ -16,11 +16,7 @@ describe('SMTPServer', function() {
 
         var server = new SMTPServer({
             maxClients: 5,
-            logger: {
-                info: function() {},
-                debug: function() {},
-                error: function() {}
-            },
+            logger: false,
             socketTimeout: 2 * 1000
         });
 
@@ -209,16 +205,124 @@ describe('SMTPServer', function() {
 
     });
 
+    describe('Plaintext server with hidden STARTTLS', function() {
+        var PORT = 1336;
+
+        var server = new SMTPServer({
+            maxClients: 5,
+            hideSTARTTLS: true,
+            logger: false,
+            socketTimeout: 2 * 1000
+        });
+
+        beforeEach(function(done) {
+            server.listen(PORT, '127.0.0.1', done);
+        });
+
+        afterEach(function(done) {
+            server.close(done);
+        });
+
+        it('should connect without TLS', function(done) {
+            var connection = new SMTPConnection({
+                port: PORT,
+                host: '127.0.0.1'
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                expect(connection.secure).to.be.false;
+                connection.quit();
+            });
+        });
+
+        it('should connect with TLS', function(done) {
+            var connection = new SMTPConnection({
+                port: PORT,
+                host: '127.0.0.1',
+                requireTLS: true,
+                tls: {
+                    rejectUnauthorized: false
+                }
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                expect(connection.secure).to.be.true;
+                connection.quit();
+            });
+        });
+    });
+
+    describe('Plaintext server with no STARTTLS', function() {
+        var PORT = 1336;
+
+        var server = new SMTPServer({
+            maxClients: 5,
+            disabledCommands: ['STARTTLS'],
+            loggers: false,
+            socketTimeout: 2 * 1000
+        });
+
+        beforeEach(function(done) {
+            server.listen(PORT, '127.0.0.1', done);
+        });
+
+        afterEach(function(done) {
+            server.close(done);
+        });
+
+        it('should connect without TLS', function(done) {
+            var connection = new SMTPConnection({
+                port: PORT,
+                host: '127.0.0.1'
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                expect(connection.secure).to.be.false;
+                connection.quit();
+            });
+        });
+
+        it('should not connect with TLS', function(done) {
+            var connection = new SMTPConnection({
+                port: PORT,
+                host: '127.0.0.1',
+                requireTLS: true,
+                tls: {
+                    rejectUnauthorized: false
+                }
+            });
+
+            var error;
+
+            connection.on('error', function(err) {
+                error = err;
+            });
+
+            connection.on('end', function() {
+                expect(error).to.exist;
+                done();
+            });
+
+            connection.connect(function() {
+                // should not be called
+                expect(false).to.be.true;
+                connection.quit();
+            });
+        });
+    });
+
     describe('Secure server', function() {
         var PORT = 1336;
 
         var server = new SMTPServer({
             secure: true,
-            logger: {
-                info: function() {},
-                debug: function() {},
-                error: function() {}
-            }
+            logger: false
         });
 
         beforeEach(function(done) {
@@ -254,11 +358,7 @@ describe('SMTPServer', function() {
 
         var server = new SMTPServer({
             maxClients: 5,
-            logger: {
-                info: function() {},
-                debug: function() {},
-                error: function() {}
-            },
+            logger: false,
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2']
         });
 
@@ -451,11 +551,7 @@ describe('SMTPServer', function() {
 
         var server = new SMTPServer({
             maxClients: 5,
-            logger: {
-                info: function() {},
-                debug: function() {},
-                error: function() {}
-            },
+            logger: false,
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2']
         });
 
@@ -634,11 +730,7 @@ describe('SMTPServer', function() {
             var connection;
 
             var server = new SMTPServer({
-                logger: {
-                    info: function() {},
-                    debug: function() {},
-                    error: function() {}
-                },
+                logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
 
@@ -679,11 +771,7 @@ describe('SMTPServer', function() {
             var connection;
 
             var server = new SMTPServer({
-                logger: {
-                    info: function() {},
-                    debug: function() {},
-                    error: function() {}
-                },
+                logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
 
