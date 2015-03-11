@@ -4,6 +4,7 @@ var chai = require('chai');
 var Client = require('smtp-connection');
 var SMTPServer = require('../lib/smtp-server').SMTPServer;
 var SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
+//var net = require('net');
 
 var expect = chai.expect;
 var fs = require('fs');
@@ -17,13 +18,16 @@ describe('SMTPServer', function() {
 
         describe('#_parseAddressCommand', function() {
             it('should parse MAIL FROM/RCPT TO', function() {
+                var conn = new SMTPConnection({
+                    options: {}
+                }, {});
 
-                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com>')).to.deep.equal({
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com>')).to.deep.equal({
                     address: 'test@example.com',
                     args: false
                 });
 
-                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@example.com> SIZE=12345    RET=HDRS  ')).to.deep.equal({
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@example.com> SIZE=12345    RET=HDRS  ')).to.deep.equal({
                     address: 'sender@example.com',
                     args: {
                         SIZE: '12345',
@@ -31,12 +35,12 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM : <test@example.com>')).to.deep.equal({
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM : <test@example.com>')).to.deep.equal({
                     address: 'test@example.com',
                     args: false
                 });
 
-                expect(SMTPConnection.prototype._parseAddressCommand('MAIL TO', 'MAIL FROM:<test@example.com>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL TO', 'MAIL FROM:<test@example.com>')).to.be.false;
             });
         });
 
@@ -233,7 +237,77 @@ describe('SMTPServer', function() {
                 // do nothing, wait until timeout occurs
             });
         });
+    });
 
+    describe('Plaintext server with no connection limit', function() {
+        this.timeout(60 * 1000);
+
+        var PORT = 1336;
+
+        var server = new SMTPServer({
+            loggers: false,
+            socketTimeout: 100 * 1000,
+            closeTimeout: 6 * 1000
+        });
+
+        beforeEach(function(done) {
+            server.listen(PORT, '127.0.0.1', done);
+        });
+
+        it('open multiple connections and close all at once', function(done) {
+            var limit = 100;
+            var cleanClose = 4;
+
+            var disconnected = 0;
+            var connected = 0;
+            var connections = [];
+
+            var createConnection = function(callback) {
+                var connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    tls: {
+                        rejectUnauthorized: false
+                    }
+                });
+
+                connection.on('error', function(err) {
+                    expect(err.responseCode).to.equal(421); // Server shutting down
+                });
+
+                connection.on('end', function() {
+                    disconnected++;
+
+                    if (disconnected >= limit) {
+                        done();
+                    }
+                });
+
+                connection.connect(function() {
+                    connected++;
+                    callback(null, connection);
+                });
+            };
+
+            var connCb = function(err, conn) {
+                expect(err).to.not.exist;
+                connections.push(conn);
+
+                if (connected >= limit) {
+                    server.close();
+                    setTimeout(function() {
+                        for (var i = 0; i < cleanClose; i++) {
+                            connections[i].quit();
+                        }
+                    }, 1000);
+                } else {
+                    createConnection(connCb);
+                }
+            };
+
+            createConnection(connCb);
+
+        });
     });
 
     describe('Plaintext server with hidden STARTTLS', function() {
@@ -293,8 +367,19 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             disabledCommands: ['STARTTLS'],
-            logger: false,
-            socketTimeout: 2 * 1000
+            loggers: false,
+            socketTimeout: 2 * 1000,
+            onAuth: function(auth, session, callback) {
+                if (auth.username === 'testuser' && auth.password === 'testpass') {
+                    callback(null, {
+                        user: 'userdata'
+                    });
+                } else {
+                    callback(null, {
+                        message: 'Authentication failed'
+                    });
+                }
+            }
         });
 
         beforeEach(function(done) {
@@ -346,6 +431,81 @@ describe('SMTPServer', function() {
                 connection.quit();
             });
         });
+
+        it('should close after too many unauthenticated commands', function(done) {
+            var connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                ignoreTLS: true
+            });
+
+            connection.on('error', function(err) {
+                expect(err).to.exist;
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                var looper = function() {
+                    connection._currentAction = function(str) {
+                        console.log(str);
+                        looper();
+                    };
+                    connection._sendCommand('NOOP');
+                };
+                looper();
+            });
+        });
+
+        it('should close after too many unrecognized commands', function(done) {
+            var connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                ignoreTLS: true
+            });
+
+            connection.on('error', function(err) {
+                expect(err).to.exist;
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                connection.login({
+                    user: 'testuser',
+                    pass: 'testpass'
+                }, function(err) {
+                    expect(err).to.not.exist;
+
+                    var looper = function() {
+                        connection._currentAction = function(str) {
+                            console.log(str);
+                            looper();
+                        };
+                        connection._sendCommand('ZOOP');
+                    };
+                    looper();
+                });
+            });
+        });
+
+        /*
+        it('should reject early talker', function(done) {
+            var socket = net.connect(PORT, '127.0.0.1', function(){
+                var buffers = [];
+                socket.on('data', function(chunk){
+                    buffers.push(chunk);
+                });
+                socket.on('end', function(){
+                    var data = Buffer.concat(buffers).toString();
+                    console.log(data);
+                    done();
+                });
+                socket.write('EHLO FOO\r\n');
+            });
+        });
+*/
+
     });
 
     describe('Secure server', function() {
@@ -390,34 +550,33 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             logger: false,
-            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2']
-        });
-
-        server.onAuth = function(auth, session, callback) {
-            if (auth.method === 'XOAUTH2') {
-                if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
+            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
+            onAuth: function(auth, session, callback) {
+                if (auth.method === 'XOAUTH2') {
+                    if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
+                        callback(null, {
+                            user: 'userdata'
+                        });
+                    } else {
+                        callback(null, {
+                            data: {
+                                status: '401',
+                                schemes: 'bearer mac',
+                                scope: 'https://mail.google.com/'
+                            }
+                        });
+                    }
+                } else if (auth.username === 'testuser' && auth.password === 'testpass') {
                     callback(null, {
                         user: 'userdata'
                     });
                 } else {
                     callback(null, {
-                        data: {
-                            status: '401',
-                            schemes: 'bearer mac',
-                            scope: 'https://mail.google.com/'
-                        }
+                        message: 'Authentication failed'
                     });
                 }
-            } else if (auth.username === 'testuser' && auth.password === 'testpass') {
-                callback(null, {
-                    user: 'userdata'
-                });
-            } else {
-                callback(null, {
-                    message: 'Authentication failed'
-                });
             }
-        };
+        });
 
         beforeEach(function(done) {
             server.listen(PORT, '127.0.0.1', done);
