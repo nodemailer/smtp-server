@@ -4,7 +4,7 @@ var chai = require('chai');
 var Client = require('smtp-connection');
 var SMTPServer = require('../lib/smtp-server').SMTPServer;
 var SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
-//var net = require('net');
+var net = require('net');
 
 var expect = chai.expect;
 var fs = require('fs');
@@ -245,7 +245,7 @@ describe('SMTPServer', function() {
         var PORT = 1336;
 
         var server = new SMTPServer({
-            loggers: false,
+            logger: false,
             socketTimeout: 100 * 1000,
             closeTimeout: 6 * 1000
         });
@@ -367,7 +367,7 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             disabledCommands: ['STARTTLS'],
-            loggers: false,
+            logger: false,
             socketTimeout: 2 * 1000,
             onAuth: function(auth, session, callback) {
                 if (auth.username === 'testuser' && auth.password === 'testpass') {
@@ -447,8 +447,7 @@ describe('SMTPServer', function() {
 
             connection.connect(function() {
                 var looper = function() {
-                    connection._currentAction = function(str) {
-                        console.log(str);
+                    connection._currentAction = function() {
                         looper();
                     };
                     connection._sendCommand('NOOP');
@@ -478,8 +477,7 @@ describe('SMTPServer', function() {
                     expect(err).to.not.exist;
 
                     var looper = function() {
-                        connection._currentAction = function(str) {
-                            console.log(str);
+                        connection._currentAction = function() {
                             looper();
                         };
                         connection._sendCommand('ZOOP');
@@ -489,22 +487,40 @@ describe('SMTPServer', function() {
             });
         });
 
-        /*
         it('should reject early talker', function(done) {
-            var socket = net.connect(PORT, '127.0.0.1', function(){
+            var socket = net.connect(PORT, '127.0.0.1', function() {
                 var buffers = [];
-                socket.on('data', function(chunk){
+                socket.on('data', function(chunk) {
                     buffers.push(chunk);
                 });
-                socket.on('end', function(){
+                socket.on('end', function() {
                     var data = Buffer.concat(buffers).toString();
-                    console.log(data);
+                    expect(/^421 /.test(data)).to.be.true;
                     done();
                 });
                 socket.write('EHLO FOO\r\n');
             });
         });
-*/
+
+        it('should reject HTTP requests', function(done) {
+            var socket = net.connect(PORT, '127.0.0.1', function() {
+                var buffers = [];
+                var started = false;
+                socket.on('data', function(chunk) {
+                    buffers.push(chunk);
+
+                    if (!started) {
+                        started = true;
+                        socket.write('GET /path/file.html HTTP/1.0\r\nHost: www.example.com\r\n\r\n');
+                    }
+                });
+                socket.on('end', function() {
+                    var data = Buffer.concat(buffers).toString();
+                    expect(/^554 /m.test(data)).to.be.true;
+                    done();
+                });
+            });
+        });
 
     });
 

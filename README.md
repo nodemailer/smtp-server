@@ -41,6 +41,7 @@ Where
     * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. By default logs to console. If set to `false` then nothing is logged
     * **options.maxClients** sets the maximum number of concurrently connected clients, defaults to `Infinity`
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
+    * **options.closeTimeout** how many millisceonds to wait before disconnecting pending connections once server.close() has been called (defaults to 30 seconds)
     * **onAuth** is the callback to handle authentications (see details [here](#handling-authentication))
     * **onMailFrom** is the callback to validate MAIL FROM commands (see details [here](#validating-sender-addresses))
     * **onRcptTo** is the callback to validate RCPT TO commands (see details [here](#validating-recipient-addresses))

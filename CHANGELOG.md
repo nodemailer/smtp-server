@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.2.0 2015-03-11
+
+  * Do not allow HTTP requests. If the client tries to send a command that looks like a HTTP request, then disconnect
+  * Close connection after 10 unrecognized commands
+  * Close connection after 10 unauthenticated commands
+  * Close all pending connections after `server.close()` has been called. Default delay to wait is 30 sec. Can be changed with `closeTimeout` option
+
 ## v1.1.1 2015-03-11
 
   * Fixed an issue with parsing MAIL FROM and RCPT TO commands, if there was a space before or after the first colon
