@@ -1,8 +1,10 @@
 'use strict';
 
 var chai = require('chai');
-var SMTPConnection = require('smtp-connection');
+var Client = require('smtp-connection');
 var SMTPServer = require('../lib/smtp-server').SMTPServer;
+var SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
+
 var expect = chai.expect;
 var fs = require('fs');
 
@@ -10,6 +12,35 @@ chai.config.includeStack = true;
 
 describe('SMTPServer', function() {
     this.timeout(10 * 1000);
+
+    describe('Unit tests', function() {
+
+        describe('#_parseAddressCommand', function() {
+            it('should parse MAIL FROM/RCPT TO', function() {
+
+                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com>')).to.deep.equal({
+                    address: 'test@example.com',
+                    args: false
+                });
+
+                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@example.com> SIZE=12345    RET=HDRS  ')).to.deep.equal({
+                    address: 'sender@example.com',
+                    args: {
+                        SIZE: '12345',
+                        RET: 'HDRS'
+                    }
+                });
+
+                expect(SMTPConnection.prototype._parseAddressCommand('MAIL FROM', 'MAIL FROM : <test@example.com>')).to.deep.equal({
+                    address: 'test@example.com',
+                    args: false
+                });
+
+                expect(SMTPConnection.prototype._parseAddressCommand('MAIL TO', 'MAIL FROM:<test@example.com>')).to.be.false;
+            });
+        });
+
+    });
 
     describe('Plaintext server', function() {
         var PORT = 1336;
@@ -29,7 +60,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect without TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -43,7 +74,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect with TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 tls: {
@@ -65,7 +96,7 @@ describe('SMTPServer', function() {
             var connections = [];
 
             var createConnection = function(callback) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -117,7 +148,7 @@ describe('SMTPServer', function() {
             var connections = [];
 
             var createConnection = function(callback) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -166,7 +197,7 @@ describe('SMTPServer', function() {
         });
 
         it('should close on timeout', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -184,7 +215,7 @@ describe('SMTPServer', function() {
         });
 
         it('should close on timeout using secure socket', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 tls: {
@@ -224,7 +255,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect without TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
             });
@@ -238,7 +269,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect with TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 requireTLS: true,
@@ -275,7 +306,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect without TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
             });
@@ -289,7 +320,7 @@ describe('SMTPServer', function() {
         });
 
         it('should not connect with TLS', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 requireTLS: true,
@@ -336,7 +367,7 @@ describe('SMTPServer', function() {
         });
 
         it('should connect to secure server', function(done) {
-            var connection = new SMTPConnection({
+            var connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 secure: true,
@@ -399,7 +430,7 @@ describe('SMTPServer', function() {
         describe('PLAIN', function() {
 
             it('should authenticate', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -422,7 +453,7 @@ describe('SMTPServer', function() {
             });
 
             it('should fail', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -448,7 +479,7 @@ describe('SMTPServer', function() {
         describe('LOGIN', function() {
 
             it('should authenticate', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -471,7 +502,7 @@ describe('SMTPServer', function() {
             });
 
             it('should fail', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -497,7 +528,7 @@ describe('SMTPServer', function() {
         describe('XOAUTH2', function() {
 
             it('should authenticate', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -520,7 +551,7 @@ describe('SMTPServer', function() {
             });
 
             it('should fail', function(done) {
-                var connection = new SMTPConnection({
+                var connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -603,7 +634,7 @@ describe('SMTPServer', function() {
 
         beforeEach(function(done) {
             server.listen(PORT, '127.0.0.1', function() {
-                connection = new SMTPConnection({
+                connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -740,7 +771,7 @@ describe('SMTPServer', function() {
             };
 
             server.listen(PORT, '127.0.0.1', function() {
-                connection = new SMTPConnection({
+                connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
                 });
@@ -781,7 +812,7 @@ describe('SMTPServer', function() {
             };
 
             server.listen(PORT, '127.0.0.1', function() {
-                connection = new SMTPConnection({
+                connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
                 });
