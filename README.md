@@ -217,7 +217,7 @@ You can get the stream for the incoming message with `onData` handler
 
 ```javascript
 var server = new SMTPServer({
-    onRcptTo: function(stream, session, callback){}
+    onData: function(stream, session, callback){}
 });
 ```
 
