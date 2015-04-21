@@ -566,7 +566,7 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             logger: false,
-            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
+            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
             onAuth: function(auth, session, callback) {
                 if (auth.method === 'XOAUTH2') {
                     if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
@@ -582,7 +582,13 @@ describe('SMTPServer', function() {
                             }
                         });
                     }
-                } else if (auth.username === 'testuser' && auth.password === 'testpass') {
+                } else if (auth.username === 'testuser' &&
+                    (
+                        auth.method === 'CRAM-MD5' ?
+                        auth.validatePassword('testpass') :
+                        auth.password === 'testpass'
+                    )
+                ) {
                     callback(null, {
                         user: 'userdata'
                     });
@@ -749,8 +755,54 @@ describe('SMTPServer', function() {
             });
         });
 
-        // TODO: Add tests for CRAM-MD5
-        // smtp-connection does not support it currently
+        describe('CRAM-MD5', function() {
+
+            it('should authenticate', function(done) {
+                var connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    tls: {
+                        rejectUnauthorized: false
+                    },
+                    authMethod: 'CRAM-MD5'
+                });
+
+                connection.on('end', done);
+
+                connection.connect(function() {
+                    connection.login({
+                        user: 'testuser',
+                        pass: 'testpass'
+                    }, function(err) {
+                        expect(err).to.not.exist;
+                        connection.quit();
+                    });
+                });
+            });
+
+            it('should fail', function(done) {
+                var connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    tls: {
+                        rejectUnauthorized: false
+                    },
+                    authMethod: 'CRAM-MD5'
+                });
+
+                connection.on('end', done);
+
+                connection.connect(function() {
+                    connection.login({
+                        user: 'zzzz',
+                        pass: 'yyyy'
+                    }, function(err) {
+                        expect(err).to.exist;
+                        connection.quit();
+                    });
+                });
+            });
+        });
     });
 
     describe('Mail tests', function() {

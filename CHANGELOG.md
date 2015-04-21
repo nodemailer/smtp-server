@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.3.1 2015-04-21
+
+  * Added integration tests for CRAM-MD5 authentication
+  * Exposed SNI support with `sniOptions` optional server option
+  * Define used protocol for NPN as 'smtp'
+
+## v1.3.0 2015-04-21
+
+  * Added CRAM-MD5 authentication support
+
 ## v1.2.0 2015-03-11
 
   * Do not allow HTTP requests. If the client tries to send a command that looks like a HTTP request, then disconnect
