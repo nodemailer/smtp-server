@@ -37,18 +37,18 @@ Where
     * **options.banner** optional greeting message. This message is appended to the default ESMTP response.
     * **options.authMethods** optional array of allowed authentication methods, defaults to `['PLAIN', 'LOGIN']`. Only the methods listed in this array are allowed, so if you set it to `['XOAUTH2']` then PLAIN and LOGIN are not available. Use `['PLAIN', 'LOGIN', 'XOAUTH2']` to allow all three. Authentication is only allowed in secure mode (either the server is started with `secure: true` option or STARTTLS command is used)
     * **options.disabledCommands** optional array of disabled commands (see all supported commands [here](#commands)). For example if you want to disable authentication, use `['AUTH']` as this value. If you want to allow authentication in clear text, set it to `['STARTTLS']`.
-    * **hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
+    * **options.hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
     * **options.sniOptions** optional [Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map) or an object of TLS options for SNI where servername is the key
     * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. By default logs to console. If set to `false` then nothing is logged
     * **options.maxClients** sets the maximum number of concurrently connected clients, defaults to `Infinity`
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
     * **options.closeTimeout** how many millisceonds to wait before disconnecting pending connections once server.close() has been called (defaults to 30 seconds)
-    * **onAuth** is the callback to handle authentications (see details [here](#handling-authentication))
-    * **onMailFrom** is the callback to validate MAIL FROM commands (see details [here](#validating-sender-addresses))
-    * **onRcptTo** is the callback to validate RCPT TO commands (see details [here](#validating-recipient-addresses))
-    * **onData** is the callback to handle incoming messages (see details [here](#processing-incoming-message))
+    * **options.onAuth** is the callback to handle authentications (see details [here](#handling-authentication))
+    * **options.onMailFrom** is the callback to validate MAIL FROM commands (see details [here](#validating-sender-addresses))
+    * **options.onRcptTo** is the callback to validate RCPT TO commands (see details [here](#validating-recipient-addresses))
+    * **options.onData** is the callback to handle incoming messages (see details [here](#processing-incoming-message))
 
-Additionally you can use the options from [net.createServer](http://nodejs.org/api/net.html#net_net_createserver_options_connectionlistener) and [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) (applies if `secure` is set to true). For example to set a `SNICallback` for the secure server, just set **options.SNICallback**.
+Additionally you can use the options from [net.createServer](http://nodejs.org/api/net.html#net_net_createserver_options_connectionlistener) and [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) (applies if `secure` is set to true)
 
 ### TLS and STARTLS notice
 
@@ -105,6 +105,7 @@ Where
     * **username** is the username of the user
     * **password** is the password if LOGIN or PLAIN was used
     * **accessToken** is the OAuth2 bearer access token if 'XOAUTH2' was used as the authentication method
+    * **validatePassword** is a function for validating CRAM-MD5 challenge responses. Takes the password of the user as an argument and returns `true` if the response matches the password
   * **session** includes information about the session like `remoteAddress` for the remote IP, see details [here](#session-object)
   * **callback** is the function to run once the user is authenticated. Takes 2 arguments: `(error, response)`
     * **error** is an error to return if authentication failed. If you want to set custom error code, set `responseCode` to the error object
@@ -129,7 +130,7 @@ var server = new SMTPServer({
 });
 ```
 
-#### Oauth2 authentication
+#### OAuth2 authentication
 
 XOAUTH2 support needs to enabled with the `authMethods` array option as it is disabled by default.
 If you support multiple authentication mechanisms, then you can check the used mechanism from the `method` property.
