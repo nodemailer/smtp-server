@@ -23,16 +23,29 @@ var server = new SMTPServer({
     // disable STARTTLS to allow authentication in clear text mode
     disabledCommands: ['STARTTLS'],
 
+    // By default only PLAIN and LOGIN are enabled
+    authMethods: ['PLAIN', 'LOGIN', 'CRAM-MD5'],
+
     // Setup authentication
     // Allow only users with username 'testuser' and password 'testpass'
     onAuth: function(auth, session, callback) {
-        if (auth.username !== 'testuser' && auth.password !== 'testpass') {
-            callback(new Error('Authentication failed'));
+        var username = 'testuser';
+        var password = 'testpass';
+
+        // check username and password
+        if (auth.username === username &&
+            (
+                auth.method === 'CRAM-MD5' ?
+                auth.validatePassword(password) : // if cram-md5, validate challenge response
+                auth.password === password // for other methods match plaintext passwords
+            )
+        ) {
+            return callback(null, {
+                user: 'userdata' // value could be an user id, or an user object etc. This value can be accessed from session.user afterwards
+            });
         }
 
-        return callback(null, {
-            user: 'userdata' // value could be an user id, or an user object etc. This value can be accessed from session.user afterwards
-        });
+        return callback(new Error('Authentication failed'));
     },
 
     // Validate MAIL FROM envelope address. Example allows all addresses that do not start with 'deny'

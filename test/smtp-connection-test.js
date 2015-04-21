@@ -748,6 +748,9 @@ describe('SMTPServer', function() {
                 });
             });
         });
+
+        // TODO: Add tests for CRAM-MD5
+        // smtp-connection does not support it currently
     });
 
     describe('Mail tests', function() {

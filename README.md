@@ -111,7 +111,7 @@ Where
       * **user** can be any value - if this is set then the user is considered logged in and this value is used later with the session data to identify the user. If this value is empty, then the authentication is considered failed
       * **data** is an object to return if XOAUTH2 authentication failed (do not set the error object in this case). This value is serialized to JSON and base64 encoded automatically, so you can just return the object
 
-This module does not support `CRAM` based authentications since these require access to unencrypted user password during the authentication process. You shouldn't store passwords unencrypted anyway, so supporting it doesn't make much sense.
+This module supports `CRAM-MD5` but the use of it is discouraged as it requires access to unencrypted user passwords during the authentication process. You shouldn't store passwords unencrypted.
 
 ### Examples
 
@@ -130,7 +130,7 @@ var server = new SMTPServer({
 
 #### Oauth2 authentication
 
-XOAUTH2 support needs to enabled with the `authMethods` array option to use it as it is disabled by default.
+XOAUTH2 support needs to enabled with the `authMethods` array option as it is disabled by default.
 If you support multiple authentication mechanisms, then you can check the used mechanism from the `method` property.
 
 ```javascript
@@ -150,6 +150,33 @@ var server = new SMTPServer({
                 }
             });
         }
+        callback(null, {user: 123}); // where 123 is the user id or similar property
+    }
+});
+```
+
+#### CRAM-MD5 authentication
+
+CRAM-MD5 support needs to enabled with the `authMethods` array option as it is disabled by default.
+If you support multiple authentication mechanisms, then you can check the used mechanism from the `method` property.
+
+This authentication method does not return a password with the username but a response to a challenge. To validate the returned challenge response, the authentication object includes a method `validatePassword` that takes the actual plaintext password as an argument and returns either `true` if the password matches with the challenge response or `false` if it does not.
+
+```javascript
+var server = new SMTPServer({
+    authMethods: ['CRAM-MD5'], // CRAM-MD5 is not enabled by default
+    onAuth: function(auth, session, callback){
+        if(auth.method !== 'CRAM-MD5'){
+            // should never occur in this case as only CRAM-MD5 is allowed
+            return callback(new Error('Expecting CRAM-MD5'));
+        }
+
+        // CRAM-MD5 does not provide a password but a challenge response
+        // that can be validated against the actual password of the user
+        if(auth.username !== 'abc' || !auth.validatePassword('def')){
+            return callback(new Error('Invalid username or password'));
+        }
+
         callback(null, {user: 123}); // where 123 is the user id or similar property
     }
 });
