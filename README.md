@@ -7,8 +7,6 @@ Create SMTP server instances on the fly. This is not a full-blown server applica
 
 Requires Node v0.12 or iojs. The module does not run on Node v0.10 as it uses [Buffer.compare](http://nodejs.org/api/buffer.html#buffer_class_method_buffer_compare_buf1_buf2) and [TLSSocket](http://nodejs.org/api/tls.html#tls_new_tls_tlssocket_socket_options).
 
-> **Beware!** This module is not battle tested (yet), I wrote it from scratch to replace simplesmtp server, so I might have overlooked some corner cases. [File an issue](https://github.com/andris9/smtp-server/issues) if you find anything strange going on when using this module.
-
 ## Support smtp-server development
 
 [![Donate to author](https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=DB26KWR2BQX5W)
@@ -35,6 +33,7 @@ Where
     * **options.secure** defines if the connection should use TLS (if `true`) or not (the default). See [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) for additional options you can use with the options object to set up the server when using `secure`. If the server does not start in TLS mode, then it is still possible to upgrade clear text socket to TLS socket with the STARTTLS command (unless you disable support for it)
     * **options.name** optional hostname of the server, used for identifying to the client (defaults to `os.hostname()`)
     * **options.banner** optional greeting message. This message is appended to the default ESMTP response.
+    * **options.size** optional maximum allowed message size in bytes, see details [here](#using-size-extension)
     * **options.authMethods** optional array of allowed authentication methods, defaults to `['PLAIN', 'LOGIN']`. Only the methods listed in this array are allowed, so if you set it to `['XOAUTH2']` then PLAIN and LOGIN are not available. Use `['PLAIN', 'LOGIN', 'XOAUTH2']` to allow all three. Authentication is only allowed in secure mode (either the server is started with `secure: true` option or STARTTLS command is used)
     * **options.disabledCommands** optional array of disabled commands (see all supported commands [here](#commands)). For example if you want to disable authentication, use `['AUTH']` as this value. If you want to allow authentication in clear text, set it to `['STARTTLS']`.
     * **options.hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
@@ -266,6 +265,28 @@ var server = new SMTPServer({
 ```
 
 This module does not prepend `Received` or any other header field to the streamed message. The entire message is streamed as-is with no modifications whatsoever. For compliancy you should add the Received data to the message yourself, see [rfc5321 4.4. Trace Information](https://tools.ietf.org/html/rfc5321#section-4.4) for details.
+
+## Using SIZE extension
+
+When creating the server you can define maximum allowed message size with the `size` option, see [RFC1870](https://tools.ietf.org/html/rfc1870) for details. This is not a strict limitation, the client is informed about the size limit but the client can still send a larger message than allowed, it is up to your application to reject or accept the oversized message. To check if the message was oversized, see `stream.sizeExceeded` option.
+
+```javascript
+var server = new SMTPServer({
+    size: 1024, // allow messages up to 1 kb
+    onData: function(stream, session, callback){
+        stream.pipe(process.stdout); // print message to console
+        stream.on('end', function(){
+            var err;
+            if(stream.sizeExceeded){
+                err = new Error('Maximum allowed message size 1kB exceeded');
+                err.statusCode = 552;
+                return callback(err);
+            }
+            callback(null, 'Message queued as abcdef');
+        });
+    }
+});
+```
 
 ## Session object
 

@@ -3,7 +3,7 @@
 // Replace '../lib/smtp-server' with 'smtp-server' when running this script outside this directory
 var SMTPServer = require('../lib/smtp-server').SMTPServer;
 
-var SERVER_PORT = 1337;
+var SERVER_PORT = 2525;
 var SERVER_HOST = '0.0.0.0';
 
 // Connect to this example server by running
@@ -25,6 +25,9 @@ var server = new SMTPServer({
 
     // By default only PLAIN and LOGIN are enabled
     authMethods: ['PLAIN', 'LOGIN', 'CRAM-MD5'],
+
+    // Accept messages up to 10 MB
+    size: 10 * 1024 * 1024,
 
     // Setup authentication
     // Allow only users with username 'testuser' and password 'testpass'
@@ -69,7 +72,15 @@ var server = new SMTPServer({
     // Handle message stream
     onData: function(stream, session, callback) {
         stream.pipe(process.stdout);
-        stream.on('end', callback); // accept the message once the stream is ended
+        stream.on('end', function(){
+            var err;
+            if(stream.sizeExceeded){
+                err = new Error('Maximum allowed message size 1kB exceeded');
+                err.statusCode = 552;
+                return callback(err);
+            }
+            callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
+        });
     }
 });
 
