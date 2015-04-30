@@ -268,7 +268,9 @@ This module does not prepend `Received` or any other header field to the streame
 
 ## Using SIZE extension
 
-When creating the server you can define maximum allowed message size with the `size` option, see [RFC1870](https://tools.ietf.org/html/rfc1870) for details. This is not a strict limitation, the client is informed about the size limit but the client can still send a larger message than allowed, it is up to your application to reject or accept the oversized message. To check if the message was oversized, see `stream.sizeExceeded` option.
+When creating the server you can define maximum allowed message size with the `size` option, see [RFC1870](https://tools.ietf.org/html/rfc1870) for details. This is not a strict limitation, the client is informed about the size limit but the client can still send a larger message than allowed, it is up to your application to reject or accept the oversized message. To check if the message was oversized, see `stream.sizeExceeded` property.
+
+> smtp-server SIZE implementation deviates from rfc1870 as it does not allow recipient level size limit checking. All size comparisons are global and not related to the storage capacity of specific recipients
 
 ```javascript
 var server = new SMTPServer({
@@ -360,6 +362,7 @@ then the envelope object is going go look like this:
   * **PIPELINING**
   * **8BITMIME** allows 8bit message content
   * **SMTPUTF8** accepts unicode e-mail addresses like *δοκιμή@παράδειγμα.δοκιμή*
+  * **SIZE** limits maximum message size
 
 Most notably, the **ENHANCEDSTATUSCODES** extension is not supported, all response codes use the standard three digit format and nothing else. I might change this in the future if I have time to revisit all responses and find the appropriate response codes.
 
