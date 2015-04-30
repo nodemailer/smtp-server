@@ -813,7 +813,8 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             logger: false,
-            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2']
+            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
+            size: 1024
         });
 
         server.onAuth = function(auth, session, callback) {
@@ -853,12 +854,17 @@ describe('SMTPServer', function() {
 
             stream.on('end', function() {
                 var message = Buffer.concat(chunks, chunklen).toString();
+                var err;
 
                 if (/^deny/i.test(message)) {
-                    callback(new Error('Not queued'));
-                } else {
-                    callback();
+                    return callback(new Error('Not queued'));
+                } else if(stream.sizeExceeded){
+                    err = new Error('Maximum allowed message size 1kB exceeded');
+                    err.statusCode = 552;
+                    return callback(err);
                 }
+
+                callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
             }.bind(this));
         };
 
@@ -940,6 +946,16 @@ describe('SMTPServer', function() {
                 from: 'sender@example.com',
                 to: ['recipient@exmaple.com']
             }, 'deny-testmessage', function(err) {
+                expect(err).to.exist;
+                done();
+            });
+        });
+
+        it('should reject too big message', function(done) {
+            connection.send({
+                from: 'sender@example.com',
+                to: ['recipient@exmaple.com']
+            }, new Array(1000).join('testmessage'), function(err) {
                 expect(err).to.exist;
                 done();
             });
