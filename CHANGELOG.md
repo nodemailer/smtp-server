@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.4.0 2015-04-30
+
+  * Added support for RFC1870 SIZE extension
+
 ## v1.3.1 2015-04-21
 
   * Added integration tests for CRAM-MD5 authentication
