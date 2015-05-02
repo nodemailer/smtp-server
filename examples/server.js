@@ -63,20 +63,30 @@ var server = new SMTPServer({
     // Validate RCPT TO envelope address. Example allows all addresses that do not start with 'deny'
     // If this method is not set, all addresses are allowed
     onRcptTo: function(address, session, callback) {
+        var err;
+
         if (/^deny/i.test(address.address)) {
             return callback(new Error('Not accepted'));
         }
+
+        // Reject messages larger than 100 bytes to an over-quota user
+        if (address.address.toLowerCase() === 'almost-full@example.com' && Number(session.envelope.mailFrom.args.SIZE) > 100) {
+            err = new Error('Insufficient channel storage: ' + address.address);
+            err.responseCode = 452;
+            return callback(err);
+        }
+
         callback();
     },
 
     // Handle message stream
     onData: function(stream, session, callback) {
         stream.pipe(process.stdout);
-        stream.on('end', function(){
+        stream.on('end', function() {
             var err;
-            if(stream.sizeExceeded){
-                err = new Error('Maximum allowed message size 1kB exceeded');
-                err.statusCode = 552;
+            if (stream.sizeExceeded) {
+                err = new Error('Error: message exceeds fixed maximum message size 10 MB');
+                err.responseCode = 552;
                 return callback(err);
             }
             callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended

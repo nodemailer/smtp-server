@@ -270,8 +270,6 @@ This module does not prepend `Received` or any other header field to the streame
 
 When creating the server you can define maximum allowed message size with the `size` option, see [RFC1870](https://tools.ietf.org/html/rfc1870) for details. This is not a strict limitation, the client is informed about the size limit but the client can still send a larger message than allowed, it is up to your application to reject or accept the oversized message. To check if the message was oversized, see `stream.sizeExceeded` property.
 
-> smtp-server SIZE implementation deviates from rfc1870 as it does not allow recipient level size limit checking. All size comparisons are global and not related to the storage capacity of specific recipients
-
 ```javascript
 var server = new SMTPServer({
     size: 1024, // allow messages up to 1 kb
@@ -280,8 +278,8 @@ var server = new SMTPServer({
         stream.on('end', function(){
             var err;
             if(stream.sizeExceeded){
-                err = new Error('Maximum allowed message size 1kB exceeded');
-                err.statusCode = 552;
+                err = new Error('Message exceeds fixed maximum message size');
+                err.responseCode = 552;
                 return callback(err);
             }
             callback(null, 'Message queued as abcdef');
