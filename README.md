@@ -24,7 +24,7 @@ Require in your script
 ### Create SMTPServer instance
 
 ```javascript
-var server = new SMTPserver(options);
+var server = new SMTPServer(options);
 ```
 
 Where
