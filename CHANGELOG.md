@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.5.0 2015-08-21
+
+  * Added support for PROXY protocol with `useProxy` option
+
 ## v1.4.0 2015-04-30
 
   * Added support for RFC1870 SIZE extension

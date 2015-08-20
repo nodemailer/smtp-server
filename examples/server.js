@@ -7,9 +7,9 @@ var SERVER_PORT = 2525;
 var SERVER_HOST = '0.0.0.0';
 
 // Connect to this example server by running
-//   telnet localhost 1337
+//   telnet localhost 2525
 // or
-//   nc -c localhost 1337
+//   nc -c localhost 2525
 
 // Authenticate with this command (username is 'testuser' and password is 'testpass')
 //   AUTH PLAIN dGVzdHVzZXIAdGVzdHVzZXIAdGVzdHBhc3M=

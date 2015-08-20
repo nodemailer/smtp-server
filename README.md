@@ -40,6 +40,7 @@ Where
     * **options.sniOptions** optional [Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map) or an object of TLS options for SNI where servername is the key
     * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. By default logs to console. If set to `false` then nothing is logged
     * **options.maxClients** sets the maximum number of concurrently connected clients, defaults to `Infinity`
+    * **options.useProxy** boolean, if set to true expects to be behind a proxy that emits a [PROXY header](http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt) (version 1 only)
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
     * **options.closeTimeout** how many millisceonds to wait before disconnecting pending connections once server.close() has been called (defaults to 30 seconds)
     * **options.onAuth** is the callback to handle authentications (see details [here](#handling-authentication))

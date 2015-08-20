@@ -858,7 +858,7 @@ describe('SMTPServer', function() {
 
                 if (/^deny/i.test(message)) {
                     return callback(new Error('Not queued'));
-                } else if(stream.sizeExceeded){
+                } else if (stream.sizeExceeded) {
                     err = new Error('Maximum allowed message size 1kB exceeded');
                     err.statusCode = 552;
                     return callback(err);
@@ -1077,6 +1077,50 @@ describe('SMTPServer', function() {
                     });
                 });
             });
+        });
+    });
+
+    describe('PROXY server', function() {
+        var PORT = 1336;
+
+        var server = new SMTPServer({
+            maxClients: 5,
+            logger: false,
+            socketTimeout: 2 * 1000,
+            useProxy: true
+        });
+
+        beforeEach(function(done) {
+            server.listen(PORT, '127.0.0.1', done);
+        });
+
+        afterEach(function(done) {
+            server.close(done);
+        });
+
+        it('should rewrite remote address value', function(done) {
+            var connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                ignoreTLS: true
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                var conn;
+                // get first connection
+                server.connections.forEach(function(val) {
+                    if (!conn) {
+                        conn = val;
+                    }
+                });
+                // default remote address should be overriden by the value from the PROXY header
+                expect(conn.remoteAddress).to.equal('198.51.100.22');
+                connection.quit();
+            });
+
+            connection._socket.write('PROXY TCP4 198.51.100.22 203.0.113.7 35646 80\r\n');
         });
     });
 });
