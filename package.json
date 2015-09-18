@@ -1,6 +1,6 @@
 {
   "name": "smtp-server",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Create custom SMTP servers on the fly",
   "main": "lib/smtp-server.js",
   "scripts": {

@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.5.2 2015-09-18
+
+  * Fixed regression with node v0.12 where STARTTLS connections were kept hanging around after close
+
 ## v1.5.1 2015-09-18
 
   * Fixed an issue where STARTTLS threw an error
