@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.5.1 2015-09-18
+
+  * Fixed an issue where STARTTLS threw an error
+  * Fixed an issue where using unknown auth schemes threw an error (a13f0bc8 by farmdog)
+
 ## v1.5.0 2015-08-21
 
   * Added support for PROXY protocol with `useProxy` option
