@@ -44,7 +44,7 @@ Where
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
     * **options.closeTimeout** how many millisceonds to wait before disconnecting pending connections once server.close() has been called (defaults to 30 seconds)
     * **options.onAuth** is the callback to handle authentications (see details [here](#handling-authentication))
-    * **options.onConnect** is the callback to handle the client connection. (see details [here](#validating-connect))
+    * **options.onConnect** is the callback to handle the client connection. (see details [here](#validating-client-connection))
     * **options.onMailFrom** is the callback to validate MAIL FROM commands (see details [here](#validating-sender-addresses))
     * **options.onRcptTo** is the callback to validate RCPT TO commands (see details [here](#validating-recipient-addresses))
     * **options.onData** is the callback to handle incoming messages (see details [here](#processing-incoming-message))
@@ -185,7 +185,7 @@ var server = new SMTPServer({
 });
 ```
 
-##Validating client connection
+## Validating client connection
 
 By default any client connection is allowed. If you want to check the remoteAddress or clientHostname before
 any other command, you can set a handler for it with `onConnect`
