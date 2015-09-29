@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6.0 2015-09-29
+
+  * Catch errors thrown by dns.reverse on invalid remoteAddress values
+  * Added onConnect handler to block unwanted connections (66784aea by jleal52)
+
 ## v1.5.2 2015-09-18
 
   * Fixed regression with node v0.12 where STARTTLS connections were kept hanging around after close
