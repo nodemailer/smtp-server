@@ -1086,7 +1086,6 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             logger: false,
-            socketTimeout: 2 * 1000,
             useProxy: true
         });
 
