@@ -204,7 +204,7 @@ Where
 
 ```javascript
 var server = new SMTPServer({
-    onConnect: function(address, session, callback){
+    onConnect: function(session, callback){
         if(session.remoteAddress === '127.0.0.1'){
             return callback(new Error('No connections from localhost allowed'));
         }
