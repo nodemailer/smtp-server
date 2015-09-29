@@ -1086,7 +1086,13 @@ describe('SMTPServer', function() {
         var server = new SMTPServer({
             maxClients: 5,
             logger: false,
-            useProxy: true
+            useProxy: true,
+            onConnect: function(session, callback){
+                if(session.remoteAddress === '1.2.3.4'){
+                    return callback(new Error('Blacklisted IP'));
+                }
+                callback();
+            }
         });
 
         beforeEach(function(done) {
@@ -1120,6 +1126,22 @@ describe('SMTPServer', function() {
             });
 
             connection._socket.write('PROXY TCP4 198.51.100.22 203.0.113.7 35646 80\r\n');
+        });
+
+        it('should block blacklisted connection', function(done) {
+            var socket = net.connect(PORT, '127.0.0.1', function() {
+                var buffers = [];
+                socket.on('data', function(chunk) {
+                    buffers.push(chunk);
+                });
+                socket.on('end', function() {
+                    var data = Buffer.concat(buffers).toString();
+                    expect(data.indexOf('554 ')).to.equal(0);
+                    expect(data.indexOf('Blacklisted')).to.gte(4);
+                    done();
+                });
+                socket.write('PROXY TCP4 1.2.3.4 203.0.113.7 35646 80\r\n');
+            });
         });
     });
 });

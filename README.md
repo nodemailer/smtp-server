@@ -197,6 +197,22 @@ var server = new SMTPServer({
 });
 ```
 
+Where
+
+  * **session** includes the `remoteAddress` and `clientHostname` values
+  * **callback** is the function to run after validation. If you return an error object, the connection is rejected, otherwise it is accepted
+
+```javascript
+var server = new SMTPServer({
+    onConnect: function(address, session, callback){
+        if(session.remoteAddress === '127.0.0.1'){
+            return callback(new Error('No connections from localhost allowed'));
+        }
+        return callback(); // Accept the connection
+    }
+});
+```
+
 ## Validating sender addresses
 
 By default all sender addresses (as long as these are in valid email format) are allowed. If you want to check
