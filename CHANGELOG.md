@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.7.1 2015-10-27
+
+  * Fixed an issue with empty NAME for XCLIENT
+
 ## v1.7.0 2015-10-27
 
   * Added support for XCLIENT with `useXClient` option
