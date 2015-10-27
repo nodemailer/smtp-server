@@ -29,6 +29,9 @@ var server = new SMTPServer({
     // Accept messages up to 10 MB
     size: 10 * 1024 * 1024,
 
+    // allow overriding connection properties. Only makes sense behind proxy
+    useXClient: true,
+
     // Setup authentication
     // Allow only users with username 'testuser' and password 'testpass'
     onAuth: function(auth, session, callback) {

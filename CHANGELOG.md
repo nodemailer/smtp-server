@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.7.0 2015-10-27
+
+  * Added support for XCLIENT with `useXClient` option
+  * Fixed an issue with an empty space after EHLO (67acb1534 by AtlasDev)
+  * Added dummy handlers for KILL, WIZ, SHELL
+
 ## v1.6.0 2015-09-29
 
   * Catch errors thrown by dns.reverse on invalid remoteAddress values
