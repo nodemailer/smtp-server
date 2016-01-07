@@ -97,8 +97,8 @@ var server = new SMTPServer({
     },
 
     // Handle connect close
-    onClose: function(session, callback) {
-        callback();
+    onClose: function(session) {
+
     }
 });
 
