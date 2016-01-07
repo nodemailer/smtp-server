@@ -94,6 +94,11 @@ var server = new SMTPServer({
             }
             callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
         });
+    },
+
+    // Handle connect close
+    onClose: function(session) {
+
     }
 });
 
