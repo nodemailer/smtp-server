@@ -30,7 +30,7 @@ var server = new SMTPServer(options);
 Where
 
   * **options** defines the behavior of the server
-    * **options.secure** defines if the connection should use TLS (if `true`) or not (the default). See [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) for additional options you can use with the options object to set up the server when using `secure`. If the server does not start in TLS mode, then it is still possible to upgrade clear text socket to TLS socket with the STARTTLS command (unless you disable support for it)
+    * **options.secure** if `true`, the connection will use TLS. The default is `false`. If the server doesn't start in TLS mode, it is still possible to upgrade clear text socket to TLS socket with the STARTTLS command (unless you disable support for it). If secure is `true`, [additional tls options for tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) can be added directly onto this options object.
     * **options.name** optional hostname of the server, used for identifying to the client (defaults to `os.hostname()`)
     * **options.banner** optional greeting message. This message is appended to the default ESMTP response.
     * **options.size** optional maximum allowed message size in bytes, see details [here](#using-size-extension)
@@ -51,6 +51,14 @@ Where
     * **options.onData** is the callback to handle incoming messages (see details [here](#processing-incoming-message))
 
 Additionally you can use the options from [net.createServer](http://nodejs.org/api/net.html#net_net_createserver_options_connectionlistener) and [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) (applies if `secure` is set to true)
+
+#### Server Methods
+
+The `server` object returned from `new SMTPServer` has the following methods:
+
+**listen(port)** - Begins listening on the given port.
+
+**close()** - Stops listening.
 
 ### TLS and STARTLS notice
 
