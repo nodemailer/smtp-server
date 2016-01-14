@@ -56,9 +56,8 @@ Additionally you can use the options from [net.createServer](http://nodejs.org/a
 
 The `server` object returned from `new SMTPServer` has the following methods:
 
-**listen(port)** - Begins listening on the given port.
-
-**close()** - Stops listening.
+  * **listen(port)** - Begins listening on the given port
+  * **close(callback)** - Stops the server from accepting new connections. `callback` is invoked once all client connections are closed
 
 ### TLS and STARTLS notice
 
