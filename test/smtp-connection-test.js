@@ -44,6 +44,13 @@ describe('SMTPServer', function () {
                 });
 
                 expect(conn._parseAddressCommand('MAIL TO', 'MAIL FROM:<test@example.com>')).to.be.false;
+
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@example.com> CUSTOM=a+ABc+20foo')).to.deep.equal({
+                    address: 'sender@example.com',
+                    args: {
+                        CUSTOM: 'a\xabc foo'
+                    }
+                });
             });
         });
 

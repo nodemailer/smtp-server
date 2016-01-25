@@ -15,7 +15,7 @@
     "grunt-eslint": "^17.3.1",
     "grunt-mocha-test": "^0.12.7",
     "mocha": "^2.3.4",
-    "smtp-connection": "^2.0.0"
+    "smtp-connection": "^2.0.1"
   },
   "engines": {
     "node": ">=0.12"
