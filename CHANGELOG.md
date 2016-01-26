@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8.0-beta.0 2016-01-26
+
+  * Fixed a bug with XCLIENT ADDR validation
+  * Added support for XFORWARD command
+  * Expose XCLIENT and XFORWARD data for the session object (session.xClient, session.xForward - both are Map objects where uppercase argument name is the key, eg. session.xClient.get('ADDR') to see the IP address of XCLIENT)
+
 ## v1.7.1 2015-10-27
 
   * Fixed an issue with empty NAME for XCLIENT
