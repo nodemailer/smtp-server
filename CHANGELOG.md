@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.0-beta.0 2016-02-05
+
+  * Added new connection method `onClose`
+
 ## v1.8.0-beta.0 2016-01-26
 
   * Fixed a bug with XCLIENT ADDR validation

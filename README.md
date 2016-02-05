@@ -50,6 +50,7 @@ Where
     * **options.onMailFrom** is the callback to validate MAIL FROM commands (see details [here](#validating-sender-addresses))
     * **options.onRcptTo** is the callback to validate RCPT TO commands (see details [here](#validating-recipient-addresses))
     * **options.onData** is the callback to handle incoming messages (see details [here](#processing-incoming-message))
+    * **options.onClose** is the callback that informs about closed client connection
 
 Additionally you can use the options from [net.createServer](http://nodejs.org/api/net.html#net_net_createserver_options_connectionlistener) and [tls.createServer](http://nodejs.org/api/tls.html#tls_tls_createserver_options_secureconnectionlistener) (applies if `secure` is set to true)
 
@@ -219,6 +220,14 @@ var server = new SMTPServer({
         }
         return callback(); // Accept the connection
     }
+});
+```
+
+If you also need to detect when a connection is closed use `onClose`. This method does not expect you to run a callback function as it is purely informational.
+
+```javascript
+var server = new SMTPServer({
+    onClose: function(session){}
 });
 ```
 

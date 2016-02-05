@@ -1154,4 +1154,40 @@ describe('SMTPServer', function () {
             });
         });
     });
+
+    describe('onClose handler', function () {
+        var PORT = 1336;
+
+        it('should detect once a connection is closed', function (done) {
+            var closed = 0;
+            var total = 50;
+            var server = new SMTPServer({
+                logger: false,
+                onClose: function (session) {
+                    expect(session).to.exist;
+                    expect(closed).to.be.lt(total);
+                    if (++closed >= total) {
+                        server.close(done);
+                    }
+                }
+            });
+
+            server.listen(PORT, '127.0.0.1', function () {
+                var createConnection = function () {
+                    var connection = new Client({
+                        port: PORT,
+                        host: '127.0.0.1',
+                        ignoreTLS: true
+                    });
+
+                    connection.connect(function () {
+                        setTimeout(connection.quit.bind(connection), 100);
+                    });
+                };
+                for (var i = 0; i < total; i++) {
+                    createConnection();
+                }
+            });
+        });
+    });
 });
