@@ -1,6 +1,6 @@
 {
   "name": "smtp-server",
-  "version": "1.9.0-beta.0",
+  "version": "1.9.0",
   "description": "Create custom SMTP servers on the fly",
   "main": "lib/smtp-server.js",
   "scripts": {
@@ -10,15 +10,15 @@
   "license": "MIT",
   "dependencies": {
     "ipv6-normalize": "^1.0.1",
-    "nodemailer-shared": "^1.0.3"
+    "nodemailer-shared": "^1.0.4"
   },
   "devDependencies": {
     "chai": "^3.5.0",
     "grunt": "^0.4.5",
-    "grunt-eslint": "^17.3.1",
+    "grunt-eslint": "^18.0.0",
     "grunt-mocha-test": "^0.12.7",
     "mocha": "^2.4.5",
-    "smtp-connection": "^2.1.0"
+    "smtp-connection": "^2.3.0"
   },
   "engines": {
     "node": ">=0.12"

@@ -52,5 +52,9 @@ module.exports = {
         node: true
     },
     extends: 'eslint:recommended',
-    fix: true
+    fix: true,
+    globals: {
+        Map: false,
+        Set: false
+    }
 };

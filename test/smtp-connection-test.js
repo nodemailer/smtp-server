@@ -577,6 +577,7 @@ describe('SMTPServer', function () {
             maxClients: 5,
             logger: false,
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
+            allowInsecureAuth: true,
             onAuth: function (auth, session, callback) {
                 if (auth.method === 'XOAUTH2') {
                     if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
@@ -676,7 +677,30 @@ describe('SMTPServer', function () {
                     tls: {
                         rejectUnauthorized: false
                     },
-                    authMethod: 'LOGIN'
+                    authMethod: 'LOGIN',
+                    logger: false
+                });
+
+                connection.on('end', done);
+
+                connection.connect(function () {
+                    connection.login({
+                        user: 'testuser',
+                        pass: 'testpass'
+                    }, function (err) {
+                        expect(err).to.not.exist;
+                        connection.quit();
+                    });
+                });
+            });
+
+            it('should authenticate without STARTTLS', function (done) {
+                var connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    ignoreTLS: true,
+                    authMethod: 'LOGIN',
+                    logger: false
                 });
 
                 connection.on('end', done);
