@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.9.1 2016-04-26
+
+  * Check that `connection._parser` exists before trying to use it in the DATA handler
+
 ## v1.9.0 2016-02-20
 
   * Added new connection method `onClose`
