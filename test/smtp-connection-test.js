@@ -526,7 +526,7 @@ describe('SMTPServer', function () {
                 });
                 socket.on('end', function () {
                     var data = Buffer.concat(buffers).toString();
-                    expect(/^554 /m.test(data)).to.be.true;
+                    expect(/^500 /m.test(data)).to.be.true;
                     done();
                 });
             });
@@ -1123,7 +1123,9 @@ describe('SMTPServer', function () {
             useProxy: true,
             onConnect: function (session, callback) {
                 if (session.remoteAddress === '1.2.3.4') {
-                    return callback(new Error('Blacklisted IP'));
+                    var err = new Error('Blacklisted IP');
+                    err.responseCode = 421;
+                    return callback(err);
                 }
                 callback();
             }
@@ -1170,7 +1172,7 @@ describe('SMTPServer', function () {
                 });
                 socket.on('end', function () {
                     var data = Buffer.concat(buffers).toString();
-                    expect(data.indexOf('554 ')).to.equal(0);
+                    expect(data.indexOf('421 ')).to.equal(0);
                     expect(data.indexOf('Blacklisted')).to.gte(4);
                     done();
                 });
