@@ -526,7 +526,7 @@ describe('SMTPServer', function () {
                 });
                 socket.on('end', function () {
                     var data = Buffer.concat(buffers).toString();
-                    expect(/^500 /m.test(data)).to.be.true;
+                    expect(/^421 /m.test(data)).to.be.true;
                     done();
                 });
             });
