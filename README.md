@@ -35,6 +35,7 @@ Where
     * **options.banner** optional greeting message. This message is appended to the default ESMTP response.
     * **options.size** optional maximum allowed message size in bytes, see details [here](#using-size-extension)
     * **options.authMethods** optional array of allowed authentication methods, defaults to `['PLAIN', 'LOGIN']`. Only the methods listed in this array are allowed, so if you set it to `['XOAUTH2']` then PLAIN and LOGIN are not available. Use `['PLAIN', 'LOGIN', 'XOAUTH2']` to allow all three. Authentication is only allowed in secure mode (either the server is started with `secure: true` option or STARTTLS command is used)
+    * **options.authOptional** allow authentication, but do not require it
     * **options.disabledCommands** optional array of disabled commands (see all supported commands [here](#commands)). For example if you want to disable authentication, use `['AUTH']` as this value. If you want to allow authentication in clear text, set it to `['STARTTLS']`.
     * **options.hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
     * **options.allowInsecureAuth** optional boolean, if set to true allows authentication even if connection is not secured first
