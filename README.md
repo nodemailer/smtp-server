@@ -38,6 +38,9 @@ Where
     * **options.authOptional** allow authentication, but do not require it
     * **options.disabledCommands** optional array of disabled commands (see all supported commands [here](#commands)). For example if you want to disable authentication, use `['AUTH']` as this value. If you want to allow authentication in clear text, set it to `['STARTTLS']`.
     * **options.hideSTARTTLS** optional boolean, if set to true then allow using STARTTLS but do not advertise or require it. It only makes sense when creating integration test servers for testing the scenario where you want to try STARTTLS even when it is not advertised
+    * **options.hidePIPELINING** optional boolean, if set to true then does not show PIPELINING in feature list
+    * **options.hide8BITMIME** optional boolean, if set to true then does not show 8BITMIME in features list
+    * **options.hideSMTPUTF8** optional boolean, if set to true then does not show SMTPUTF8 in features list
     * **options.allowInsecureAuth** optional boolean, if set to true allows authentication even if connection is not secured first
     * **options.sniOptions** optional [Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map) or an object of TLS options for SNI where servername is the key. Overrided by SNICallback.
     * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. If set to `true` then logs to console. If value is not set or is `false` then nothing is logged

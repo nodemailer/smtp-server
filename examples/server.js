@@ -38,6 +38,8 @@ var server = new SMTPServer({
     // allow overriding connection properties. Only makes sense behind proxy
     useXClient: true,
 
+    hidePIPELINING: true,
+
     // use logging of proxied client data. Only makes sense behind proxy
     useXForward: true,
 
