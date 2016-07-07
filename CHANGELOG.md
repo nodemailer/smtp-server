@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.0 2016-07-07
+
+  * Added support for LMTP protocol. Set `lmtp` option to `true` in order to use it
+
 ## v1.10.0 2016-07-06
 
   * Added options `hidePIPELINING`, `hide8BITMIME` and `hideSMTPUTF8`

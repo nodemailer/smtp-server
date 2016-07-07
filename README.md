@@ -1,6 +1,6 @@
 # smtp-server
 
-Create SMTP server instances on the fly. This is not a full-blown server application like [Haraka](https://haraka.github.io/) but an easy way to add custom SMTP listeners to your app. This module is the successor for the server part of the (now deprecated) SMTP module [simplesmtp](https://www.npmjs.com/package/simplesmtp). For matching SMTP client see [smtp-connection](https://www.npmjs.com/package/smtp-connection).
+Create SMTP and LMTP server instances on the fly. This is not a full-blown server application like [Haraka](https://haraka.github.io/) but an easy way to add custom SMTP listeners to your app. This module is the successor for the server part of the (now deprecated) SMTP module [simplesmtp](https://www.npmjs.com/package/simplesmtp). For matching SMTP client see [smtp-connection](https://www.npmjs.com/package/smtp-connection).
 
 [![Build Status](https://secure.travis-ci.org/andris9/smtp-server.svg)](http://travis-ci.org/andris9/Nodemailer)
 [![npm version](https://badge.fury.io/js/smtp-server.svg)](http://badge.fury.io/js/smtp-server)
@@ -48,6 +48,7 @@ Where
     * **options.useProxy** boolean, if set to true expects to be behind a proxy that emits a [PROXY header](http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt) (version 1 only)
     * **options.useXClient** boolean, if set to true, enables usage of [XCLIENT](http://www.postfix.org/XCLIENT_README.html) extension to override connection properties. See `session.xClient` (Map object) for the details provided by the client
     * **options.useXForward** boolean, if set to true, enables usage of [XFORWARD](http://www.postfix.org/XFORWARD_README.html) extension. See `session.xForward` (Map object) for the details provided by the client
+    * **options.lmtp** boolean, if set to true use LMTP protocol instead of SMTP
     * **options.socketTimeout** how many milliseconds of inactivity to allow before disconnecting the client (defaults to 1 minute)
     * **options.closeTimeout** how many millisceonds to wait before disconnecting pending connections once server.close() has been called (defaults to 30 seconds)
     * **options.onAuth** is the callback to handle authentications (see details [here](#handling-authentication))
@@ -340,6 +341,39 @@ var server = new SMTPServer({
     }
 });
 ```
+
+## Using LMTP
+
+If `lmtp` option is set to true when starting the server, then LMTP protocol is used instead of SMTP. The main
+difference between these two is how multiple recipients are handled. In case of SMTP the message either fails or succeeds
+but in LMTP the message might fail and succeed individually for every recipient.
+
+If your LMTP server application does not distinguish between different recipients then you do not need to care about it.
+On the other hand if you want to report results separately for every recipient you can do this by providing an array
+of responses instead of a single error or success message. The array must contain responses in the same order as in the
+envelope rcptTo array.
+
+```javascript
+var server = new SMTPServer({
+    lmtp: true,
+    onData: function(stream, session, callback){
+        stream.pipe(process.stdout); // print message to console
+        stream.on('end', function(){
+            // reject every other recipient
+            var response = session.envelope.rcptTo.map(function (rcpt, i) {
+                if (i % 2) {
+                    return new Error('<' + rcpt.address + '> Not accepted');
+                } else {
+                    return '<' + rcpt.address + '> Accepted';
+                }
+            });
+            callback(null, response);
+        });
+    }
+});
+```
+
+If you provide a single error by invoking `callback(err)` or single success message `callback(null, 'OK')` like when dealing with SMTP then every recipient gets the same response.
 
 ## Session object
 
