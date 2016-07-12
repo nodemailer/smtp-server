@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.11.1 2016-08-12
+
+  * this.server.options bug fix #58 (xpepermint)
+
 ## v1.11.0 2016-07-07
 
   * Added support for LMTP protocol. Set `lmtp` option to `true` in order to use it
