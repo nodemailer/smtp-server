@@ -1,6 +1,10 @@
 # Changelog
 
-## v1.11.1 2016-08-12
+## v1.11.2 2016-07-15
+
+  * Do not strip last linebreak
+
+## v1.11.1 2016-07-12
 
   * this.server.options bug fix #58 (xpepermint)
 
