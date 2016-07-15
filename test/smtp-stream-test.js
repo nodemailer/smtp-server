@@ -51,7 +51,7 @@ describe('SMTPStream', function () {
                     output += chunk.toString();
                 });
                 datastream.on('end', function () {
-                    expect(output).to.equal('test1\r\n.test2\r\n.test3');
+                    expect(output).to.equal('test1\r\n.test2\r\n.test3\r\n');
                     stream.continue();
                 });
             }
