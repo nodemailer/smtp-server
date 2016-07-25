@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.12.0 2016-07-25
+
+  * Added new property for session: `session.transmissionType` that identifies the current transmission (SMTP, ESMTP, ESMTPA etc.)
+
 ## v1.11.2 2016-07-15
 
   * Do not strip last linebreak

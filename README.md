@@ -389,6 +389,7 @@ Session object that is passed to the handler functions includes the following pr
     * **rcptTo** includes an array of address objects
   * **user** includes the `user` value returned with the authentication handler
   * **transaction** number of the current transaction. 1 is for the first message, 2 is for the 2nd message etc.
+  * **transmissionType** indicates the current protocol type for the received header (SMTP, ESMTP, ESMTPA etc.)
 
 ## Address object
 

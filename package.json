@@ -1,6 +1,6 @@
 {
   "name": "smtp-server",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "description": "Create custom SMTP servers on the fly",
   "main": "lib/smtp-server.js",
   "scripts": {
@@ -19,7 +19,7 @@
     "grunt-eslint": "^19.0.0",
     "grunt-mocha-test": "^0.12.7",
     "mocha": "^2.5.3",
-    "smtp-connection": "^2.7.0"
+    "smtp-connection": "^2.10.0"
   },
   "engines": {
     "node": ">=0.12"
