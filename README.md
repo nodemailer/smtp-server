@@ -42,6 +42,7 @@ Where
     * **options.hide8BITMIME** optional boolean, if set to true then does not show 8BITMIME in features list
     * **options.hideSMTPUTF8** optional boolean, if set to true then does not show SMTPUTF8 in features list
     * **options.allowInsecureAuth** optional boolean, if set to true allows authentication even if connection is not secured first
+    * **options.disableReverseLookup** optional boolean, if set to true then does not try to reverse resolve client hostname
     * **options.sniOptions** optional [Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map) or an object of TLS options for SNI where servername is the key. Overrided by SNICallback.
     * **options.logger** optional [bunyan](https://github.com/trentm/node-bunyan) compatible logger instance. If set to `true` then logs to console. If value is not set or is `false` then nothing is logged
     * **options.maxClients** sets the maximum number of concurrently connected clients, defaults to `Infinity`

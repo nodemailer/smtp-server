@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.13.0 2016-07-29
+
+  * Added new option `disableReverseLookup` to skip reverse resolving client hostname on connection
+
 ## v1.12.0 2016-07-25
 
   * Added new property for session: `session.transmissionType` that identifies the current transmission (SMTP, ESMTP, ESMTPA etc.)
