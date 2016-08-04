@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.13.1 2016-07-29
+
+  * Fixed remoteHostname resolving bug
+
 ## v1.13.0 2016-07-29
 
   * Added new option `disableReverseLookup` to skip reverse resolving client hostname on connection
