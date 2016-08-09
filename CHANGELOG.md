@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.14.0 2016-08-09
+
+  * Expose connection TLS cipher in the `tlsOptions` property
+
 ## v1.13.1 2016-07-29
 
   * Fixed remoteHostname resolving bug

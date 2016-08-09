@@ -380,6 +380,7 @@ describe('SMTPServer', function () {
             logger: false,
             socketTimeout: 2 * 1000,
             onAuth: function (auth, session, callback) {
+                expect(session.tlsOptions).to.be.false;
                 if (auth.username === 'testuser' && auth.password === 'testpass') {
                     return callback(null, {
                         user: 'userdata'
@@ -579,6 +580,7 @@ describe('SMTPServer', function () {
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
             allowInsecureAuth: true,
             onAuth: function (auth, session, callback) {
+                expect(session.tlsOptions).to.exist;
                 if (auth.method === 'XOAUTH2') {
                     if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
                         return callback(null, {
