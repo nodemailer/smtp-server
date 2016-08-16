@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.14.1 2016-08-16
+
+  * Ignore connection errors outside transaction
+
 ## v1.14.0 2016-08-09
 
   * Expose connection TLS cipher in the `tlsOptions` property
