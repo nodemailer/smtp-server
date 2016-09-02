@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.14.2 2016-09-02
+
+  * Fix issue with invalidly resolved IPv4 addresses on IPv6 interface
+
 ## v1.14.1 2016-08-16
 
   * Ignore connection errors outside transaction
