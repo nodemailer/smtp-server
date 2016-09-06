@@ -12,7 +12,7 @@ Requires Node v0.12 or iojs. The module does not run on Node v0.10 as it uses [B
   * **[nodemailer](https://github.com/nodemailer/nodemailer)** – all in one package to send email from Node.js
   * **[smtp-server](https://github.com/andris9/smtp-server)** – add SMTP server interface to your application
   * **[smtp-server](https://github.com/nodemailer/smtp-connection)** – connect to SMTP servers from your application
-  * **[szone-mta](https://github.com/zone-eu/zone-mta)** – full featured outbound MTA built using smtp-connection and smtp-server modules
+  * **[zone-mta](https://github.com/zone-eu/zone-mta)** – full featured outbound MTA built using smtp-connection and smtp-server modules
 
 ## Support smtp-server development
 
