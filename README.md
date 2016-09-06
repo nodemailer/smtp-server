@@ -7,6 +7,13 @@ Create SMTP and LMTP server instances on the fly. This is not a full-blown serve
 
 Requires Node v0.12 or iojs. The module does not run on Node v0.10 as it uses [Buffer.compare](http://nodejs.org/api/buffer.html#buffer_class_method_buffer_compare_buf1_buf2) and [TLSSocket](http://nodejs.org/api/tls.html#tls_new_tls_tlssocket_socket_options).
 
+## Other similar packages you might be interested in
+
+  * **[nodemailer](https://github.com/nodemailer/nodemailer)** – all in one package to send email from Node.js
+  * **[smtp-server](https://github.com/andris9/smtp-server)** – add SMTP server interface to your application
+  * **[smtp-server](https://github.com/nodemailer/smtp-connection)** – connect to SMTP servers from your application
+  * **[szone-mta](https://github.com/zone-eu/zone-mta)** – full featured outbound MTA built using smtp-connection and smtp-server modules
+
 ## Support smtp-server development
 
 [![Donate to author](https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=DB26KWR2BQX5W)
