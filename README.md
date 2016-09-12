@@ -2,6 +2,8 @@
 
 Create SMTP and LMTP server instances on the fly. This is not a full-blown server application like [Haraka](https://haraka.github.io/) but an easy way to add custom SMTP listeners to your app. This module is the successor for the server part of the (now deprecated) SMTP module [simplesmtp](https://www.npmjs.com/package/simplesmtp). For matching SMTP client see [smtp-connection](https://www.npmjs.com/package/smtp-connection).
 
+> **NB!** this module does not make any email deliveries by itself. smtp-server allows you to listen on ports 25/24/465/587/etc using SMTP protocol and that's it. Your own application is responsible of accepting and delivering the message to destination.
+
 [![Build Status](https://secure.travis-ci.org/andris9/smtp-server.svg)](http://travis-ci.org/andris9/Nodemailer)
 [![npm version](https://badge.fury.io/js/smtp-server.svg)](http://badge.fury.io/js/smtp-server)
 
