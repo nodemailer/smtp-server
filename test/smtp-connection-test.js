@@ -1160,6 +1160,7 @@ describe('SMTPServer', function () {
                 });
                 // default remote address should be overriden by the value from the PROXY header
                 expect(conn.remoteAddress).to.equal('198.51.100.22');
+                expect(conn.remotePort).to.equal(35646);
                 connection.quit();
             });
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.15.0 2016-09-23
+
+  * Added new connection property `remotePort`
+  * Emit 'connect' event when all handshakes (including PROXY) have been completed
+
 ## v1.14.2 2016-09-02
 
   * Fix issue with invalidly resolved IPv4 addresses on IPv6 interface
