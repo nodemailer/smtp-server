@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.16.1 2016-10-17
+
+  * Allowed rewriting `connect` method
+
 ## v1.16.0 2016-10-17
 
   * Added new method `connect` to pass already established sockets to the server
