@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.16.0 2016-10-17
+
+  * Added new method `connect` to pass already established sockets to the server
+
 ## v1.15.0 2016-09-23
 
   * Added new connection property `remotePort`
