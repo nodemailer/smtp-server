@@ -465,6 +465,10 @@ Most notably, the **ENHANCEDSTATUSCODES** extension is not supported, all respon
 
 **CHUNKING** is also missing. I might add support for it in the future but not at this moment since DATA already accepts a stream and CHUNKING is not supported everywhere.
 
+## Built with *smtp-server*
+
+[![Crisp.im](https://avatars0.githubusercontent.com/u/16270189?v=3&s=32)](http://crisp.im/) **[Crisp.im](http://crisp.im/)**
+
 ## License
 
 **MIT**
