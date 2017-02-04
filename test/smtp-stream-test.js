@@ -1,19 +1,19 @@
-/* eslint no-unused-expressions:0 */
-/* globals describe, it */
+/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
+/* globals beforeEach, describe, it */
 
 'use strict';
 
-var chai = require('chai');
-var SMTPStream = require('../lib/smtp-stream').SMTPStream;
-var expect = chai.expect;
+const chai = require('chai');
+const SMTPStream = require('../lib/smtp-stream').SMTPStream;
+const expect = chai.expect;
 
 chai.config.includeStack = true;
 
 describe('SMTPStream', function () {
     it('should emit commands', function (done) {
-        var stream = new SMTPStream();
+        let stream = new SMTPStream();
 
-        var expecting = [
+        let expecting = [
             new Buffer([0x43, 0x4d, 0x44, 0x31]),
             new Buffer([0x43, 0x4d, 0x44, 0x32]),
             new Buffer([0x43, 0x4d, 0x44, 0x33])
@@ -32,9 +32,9 @@ describe('SMTPStream', function () {
     });
 
     it('should start data stream', function (done) {
-        var stream = new SMTPStream();
+        let stream = new SMTPStream();
 
-        var expecting = [
+        let expecting = [
             'DATA',
             'QUIT'
         ];
@@ -43,8 +43,8 @@ describe('SMTPStream', function () {
             cmd = cmd.toString();
             expect(cmd).to.deep.equal(expecting.shift());
 
-            var datastream;
-            var output = '';
+            let datastream;
+            let output = '';
             if (cmd === 'DATA') {
                 datastream = stream.startDataMode();
                 datastream.on('data', function (chunk) {

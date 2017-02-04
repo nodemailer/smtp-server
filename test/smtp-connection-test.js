@@ -1,16 +1,17 @@
-/* eslint no-unused-expressions:0 */
-/* globals afterEach, beforeEach, describe, it */
+/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
+/* globals beforeEach, describe, it */
 
 'use strict';
 
-var chai = require('chai');
-var Client = require('smtp-connection');
-var SMTPServer = require('../lib/smtp-server').SMTPServer;
-var SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
-var net = require('net');
+const chai = require('chai');
+const Client = require('nodemailer/lib/smtp-connection');
+const XOAuth2 = require('nodemailer/lib/xoauth2');
+const SMTPServer = require('../lib/smtp-server').SMTPServer;
+const SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
+const net = require('net');
 
-var expect = chai.expect;
-var fs = require('fs');
+const expect = chai.expect;
+const fs = require('fs');
 
 chai.config.includeStack = true;
 
@@ -21,7 +22,7 @@ describe('SMTPServer', function () {
 
         describe('#_parseAddressCommand', function () {
             it('should parse MAIL FROM/RCPT TO', function () {
-                var conn = new SMTPConnection({
+                let conn = new SMTPConnection({
                     options: {}
                 }, {});
 
@@ -57,9 +58,9 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             logger: false,
             socketTimeout: 2 * 1000
@@ -74,7 +75,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect without TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -88,7 +89,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect with TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 tls: {
@@ -104,13 +105,13 @@ describe('SMTPServer', function () {
         });
 
         it('open multiple connections', function (done) {
-            var limit = 5;
-            var disconnected = 0;
-            var connected = 0;
-            var connections = [];
+            let limit = 5;
+            let disconnected = 0;
+            let connected = 0;
+            let connections = [];
 
-            var createConnection = function (callback) {
-                var connection = new Client({
+            let createConnection = function (callback) {
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -137,7 +138,7 @@ describe('SMTPServer', function () {
                 });
             };
 
-            var connCb = function (err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
@@ -148,21 +149,21 @@ describe('SMTPServer', function () {
                 }
             };
 
-            for (var i = 0; i < limit; i++) {
+            for (let i = 0; i < limit; i++) {
                 createConnection(connCb);
             }
 
         });
 
         it('should reject too many connections', function (done) {
-            var limit = 7;
-            var expectedErrors = 2;
-            var disconnected = 0;
-            var connected = 0;
-            var connections = [];
+            let limit = 7;
+            let expectedErrors = 2;
+            let disconnected = 0;
+            let connected = 0;
+            let connections = [];
 
-            var createConnection = function (callback) {
-                var connection = new Client({
+            let createConnection = function (callback) {
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -193,7 +194,7 @@ describe('SMTPServer', function () {
                 });
             };
 
-            var connCb = function (err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
@@ -204,14 +205,14 @@ describe('SMTPServer', function () {
                 }
             };
 
-            for (var i = 0; i < limit; i++) {
+            for (let i = 0; i < limit; i++) {
                 createConnection(connCb);
             }
 
         });
 
         it('should close on timeout', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -229,7 +230,7 @@ describe('SMTPServer', function () {
         });
 
         it('should close on timeout using secure socket', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 tls: {
@@ -252,9 +253,9 @@ describe('SMTPServer', function () {
     describe('Plaintext server with no connection limit', function () {
         this.timeout(60 * 1000); // eslint-disable-line no-invalid-this
 
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             logger: false,
             socketTimeout: 100 * 1000,
             closeTimeout: 6 * 1000
@@ -265,15 +266,15 @@ describe('SMTPServer', function () {
         });
 
         it('open multiple connections and close all at once', function (done) {
-            var limit = 100;
-            var cleanClose = 4;
+            let limit = 100;
+            let cleanClose = 4;
 
-            var disconnected = 0;
-            var connected = 0;
-            var connections = [];
+            let disconnected = 0;
+            let connected = 0;
+            let connections = [];
 
-            var createConnection = function (callback) {
-                var connection = new Client({
+            let createConnection = function (callback) {
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
@@ -299,14 +300,14 @@ describe('SMTPServer', function () {
                 });
             };
 
-            var connCb = function (err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
                 if (connected >= limit) {
                     server.close();
                     setTimeout(function () {
-                        for (var i = 0; i < cleanClose; i++) {
+                        for (let i = 0; i < cleanClose; i++) {
                             connections[i].quit();
                         }
                     }, 1000);
@@ -321,9 +322,9 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server with hidden STARTTLS', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             hideSTARTTLS: true,
             logger: false,
@@ -339,7 +340,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect without TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
             });
@@ -353,7 +354,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect with TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 requireTLS: true,
@@ -372,14 +373,14 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server with no STARTTLS', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             disabledCommands: ['STARTTLS'],
             logger: false,
             socketTimeout: 2 * 1000,
-            onAuth: function (auth, session, callback) {
+            onAuth(auth, session, callback) {
                 expect(session.tlsOptions).to.be.false;
                 if (auth.username === 'testuser' && auth.password === 'testpass') {
                     return callback(null, {
@@ -402,7 +403,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect without TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
             });
@@ -416,7 +417,7 @@ describe('SMTPServer', function () {
         });
 
         it('should not connect with TLS', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 requireTLS: true,
@@ -425,7 +426,7 @@ describe('SMTPServer', function () {
                 }
             });
 
-            var error;
+            let error;
 
             connection.on('error', function (err) {
                 error = err;
@@ -444,7 +445,7 @@ describe('SMTPServer', function () {
         });
 
         it('should close after too many unauthenticated commands', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -457,7 +458,7 @@ describe('SMTPServer', function () {
             connection.on('end', done);
 
             connection.connect(function () {
-                var looper = function () {
+                let looper = function () {
                     connection._currentAction = function () {
                         looper();
                     };
@@ -468,7 +469,7 @@ describe('SMTPServer', function () {
         });
 
         it('should close after too many unrecognized commands', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -487,7 +488,7 @@ describe('SMTPServer', function () {
                 }, function (err) {
                     expect(err).to.not.exist;
 
-                    var looper = function () {
+                    let looper = function () {
                         connection._currentAction = function () {
                             looper();
                         };
@@ -499,13 +500,13 @@ describe('SMTPServer', function () {
         });
 
         it('should reject early talker', function (done) {
-            var socket = net.connect(PORT, '127.0.0.1', function () {
-                var buffers = [];
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
                 socket.on('data', function (chunk) {
                     buffers.push(chunk);
                 });
                 socket.on('end', function () {
-                    var data = Buffer.concat(buffers).toString();
+                    let data = Buffer.concat(buffers).toString();
                     expect(/^421 /.test(data)).to.be.true;
                     done();
                 });
@@ -514,9 +515,9 @@ describe('SMTPServer', function () {
         });
 
         it('should reject HTTP requests', function (done) {
-            var socket = net.connect(PORT, '127.0.0.1', function () {
-                var buffers = [];
-                var started = false;
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                let started = false;
                 socket.on('data', function (chunk) {
                     buffers.push(chunk);
 
@@ -526,7 +527,7 @@ describe('SMTPServer', function () {
                     }
                 });
                 socket.on('end', function () {
-                    var data = Buffer.concat(buffers).toString();
+                    let data = Buffer.concat(buffers).toString();
                     expect(/^421 /m.test(data)).to.be.true;
                     done();
                 });
@@ -536,9 +537,9 @@ describe('SMTPServer', function () {
     });
 
     describe('Secure server', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             secure: true,
             logger: false
         });
@@ -554,7 +555,7 @@ describe('SMTPServer', function () {
         });
 
         it('should connect to secure server', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 secure: true,
@@ -572,14 +573,14 @@ describe('SMTPServer', function () {
     });
 
     describe('Authentication tests', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             logger: false,
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
             allowInsecureAuth: true,
-            onAuth: function (auth, session, callback) {
+            onAuth(auth, session, callback) {
                 expect(session.tlsOptions).to.exist;
                 if (auth.method === 'XOAUTH2') {
                     if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
@@ -624,13 +625,12 @@ describe('SMTPServer', function () {
         describe('PLAIN', function () {
 
             it('should authenticate', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'PLAIN'
+                    }
                 });
 
                 connection.on('end', done);
@@ -638,7 +638,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'testuser',
-                        pass: 'testpass'
+                        pass: 'testpass',
+                        method: 'PLAIN'
                     }, function (err) {
                         expect(err).to.not.exist;
                         connection.quit();
@@ -647,13 +648,12 @@ describe('SMTPServer', function () {
             });
 
             it('should fail', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'PLAIN'
+                    }
                 });
 
                 connection.on('end', done);
@@ -661,7 +661,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'zzzz',
-                        pass: 'yyyy'
+                        pass: 'yyyy',
+                        method: 'PLAIN'
                     }, function (err) {
                         expect(err).to.exist;
                         connection.quit();
@@ -673,13 +674,12 @@ describe('SMTPServer', function () {
         describe('LOGIN', function () {
 
             it('should authenticate', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
                     },
-                    authMethod: 'LOGIN',
                     logger: false
                 });
 
@@ -688,7 +688,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'testuser',
-                        pass: 'testpass'
+                        pass: 'testpass',
+                        method: 'LOGIN'
                     }, function (err) {
                         expect(err).to.not.exist;
                         connection.quit();
@@ -697,11 +698,10 @@ describe('SMTPServer', function () {
             });
 
             it('should authenticate without STARTTLS', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     ignoreTLS: true,
-                    authMethod: 'LOGIN',
                     logger: false
                 });
 
@@ -710,7 +710,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'testuser',
-                        pass: 'testpass'
+                        pass: 'testpass',
+                        method: 'LOGIN'
                     }, function (err) {
                         expect(err).to.not.exist;
                         connection.quit();
@@ -719,13 +720,12 @@ describe('SMTPServer', function () {
             });
 
             it('should fail', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'LOGIN'
+                    }
                 });
 
                 connection.on('end', done);
@@ -733,7 +733,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'zzzz',
-                        pass: 'yyyy'
+                        pass: 'yyyy',
+                        method: 'LOGIN'
                     }, function (err) {
                         expect(err).to.exist;
                         connection.quit();
@@ -745,21 +746,25 @@ describe('SMTPServer', function () {
         describe('XOAUTH2', function () {
 
             it('should authenticate', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'XOAUTH2'
+                    }
                 });
 
                 connection.on('end', done);
 
                 connection.connect(function () {
                     connection.login({
+                        type: 'oauth2',
                         user: 'testuser',
-                        xoauth2: 'testtoken'
+                        method: 'XOAUTH2',
+                        oauth2: new XOAuth2({
+                            user: 'testuser',
+                            accessToken: 'testtoken'
+                        }, false)
                     }, function (err) {
                         expect(err).to.not.exist;
                         connection.quit();
@@ -768,21 +773,25 @@ describe('SMTPServer', function () {
             });
 
             it('should fail', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'XOAUTH2'
+                    }
                 });
 
                 connection.on('end', done);
 
                 connection.connect(function () {
                     connection.login({
+                        type: 'oauth2',
                         user: 'zzzz',
-                        xoauth2: 'testtoken'
+                        method: 'XOAUTH2',
+                        oauth2: new XOAuth2({
+                            user: 'zzzz',
+                            accessToken: 'testtoken'
+                        }, false)
                     }, function (err) {
                         expect(err).to.exist;
                         connection.quit();
@@ -794,13 +803,12 @@ describe('SMTPServer', function () {
         describe('CRAM-MD5', function () {
 
             it('should authenticate', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'CRAM-MD5'
+                    }
                 });
 
                 connection.on('end', done);
@@ -808,7 +816,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'testuser',
-                        pass: 'testpass'
+                        pass: 'testpass',
+                        method: 'CRAM-MD5'
                     }, function (err) {
                         expect(err).to.not.exist;
                         connection.quit();
@@ -817,13 +826,12 @@ describe('SMTPServer', function () {
             });
 
             it('should fail', function (done) {
-                var connection = new Client({
+                let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
                     tls: {
                         rejectUnauthorized: false
-                    },
-                    authMethod: 'CRAM-MD5'
+                    }
                 });
 
                 connection.on('end', done);
@@ -831,7 +839,8 @@ describe('SMTPServer', function () {
                 connection.connect(function () {
                     connection.login({
                         user: 'zzzz',
-                        pass: 'yyyy'
+                        pass: 'yyyy',
+                        method: 'CRAM-MD5'
                     }, function (err) {
                         expect(err).to.exist;
                         connection.quit();
@@ -842,11 +851,11 @@ describe('SMTPServer', function () {
     });
 
     describe('Mail tests', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var connection;
+        let connection;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             logger: false,
             authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
@@ -880,17 +889,17 @@ describe('SMTPServer', function () {
         };
 
         server.onData = function (stream, session, callback) {
-            var chunks = [];
-            var chunklen = 0;
+            let chunks = [];
+            let chunklen = 0;
 
-            stream.on('data', function (chunk) {
+            stream.on('data', chunk => {
                 chunks.push(chunk);
                 chunklen += chunk.length;
-            }.bind(this));
+            });
 
-            stream.on('end', function () {
-                var message = Buffer.concat(chunks, chunklen).toString();
-                var err;
+            stream.on('end', () => {
+                let message = Buffer.concat(chunks, chunklen).toString();
+                let err;
 
                 if (/^deny/i.test(message)) {
                     return callback(new Error('Not queued'));
@@ -901,7 +910,7 @@ describe('SMTPServer', function () {
                 }
 
                 callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
-            }.bind(this));
+            });
         };
 
         beforeEach(function (done) {
@@ -1037,12 +1046,12 @@ describe('SMTPServer', function () {
 
     describe('SMTPUTF8', function () {
         it('should allow addresses with UTF-8 characters', function (done) {
-            var utf8Address = 'δοκιμή@παράδειγμα.δοκιμή';
-            var PORT = 1336;
+            let utf8Address = 'δοκιμή@παράδειγμα.δοκιμή';
+            let PORT = 1336;
 
-            var connection;
+            let connection;
 
-            var server = new SMTPServer({
+            let server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
@@ -1079,11 +1088,11 @@ describe('SMTPServer', function () {
 
     describe('#onData', function () {
         it('should accept a prematurely called continue callback', function (done) {
-            var PORT = 1336;
+            let PORT = 1336;
 
-            var connection;
+            let connection;
 
-            var server = new SMTPServer({
+            let server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
@@ -1117,15 +1126,15 @@ describe('SMTPServer', function () {
     });
 
     describe('PROXY server', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
-        var server = new SMTPServer({
+        let server = new SMTPServer({
             maxClients: 5,
             logger: false,
             useProxy: true,
-            onConnect: function (session, callback) {
+            onConnect(session, callback) {
                 if (session.remoteAddress === '1.2.3.4') {
-                    var err = new Error('Blacklisted IP');
+                    let err = new Error('Blacklisted IP');
                     err.responseCode = 421;
                     return callback(err);
                 }
@@ -1142,7 +1151,7 @@ describe('SMTPServer', function () {
         });
 
         it('should rewrite remote address value', function (done) {
-            var connection = new Client({
+            let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
@@ -1151,7 +1160,7 @@ describe('SMTPServer', function () {
             connection.on('end', done);
 
             connection.connect(function () {
-                var conn;
+                let conn;
                 // get first connection
                 server.connections.forEach(function (val) {
                     if (!conn) {
@@ -1168,13 +1177,13 @@ describe('SMTPServer', function () {
         });
 
         it('should block blacklisted connection', function (done) {
-            var socket = net.connect(PORT, '127.0.0.1', function () {
-                var buffers = [];
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
                 socket.on('data', function (chunk) {
                     buffers.push(chunk);
                 });
                 socket.on('end', function () {
-                    var data = Buffer.concat(buffers).toString();
+                    let data = Buffer.concat(buffers).toString();
                     expect(data.indexOf('421 ')).to.equal(0);
                     expect(data.indexOf('Blacklisted')).to.gte(4);
                     done();
@@ -1185,14 +1194,14 @@ describe('SMTPServer', function () {
     });
 
     describe('onClose handler', function () {
-        var PORT = 1336;
+        let PORT = 1336;
 
         it('should detect once a connection is closed', function (done) {
-            var closed = 0;
-            var total = 50;
-            var server = new SMTPServer({
+            let closed = 0;
+            let total = 50;
+            let server = new SMTPServer({
                 logger: false,
-                onClose: function (session) {
+                onClose(session) {
                     expect(session).to.exist;
                     expect(closed).to.be.lt(total);
                     if (++closed >= total) {
@@ -1202,18 +1211,18 @@ describe('SMTPServer', function () {
             });
 
             server.listen(PORT, '127.0.0.1', function () {
-                var createConnection = function () {
-                    var connection = new Client({
+                let createConnection = function () {
+                    let connection = new Client({
                         port: PORT,
                         host: '127.0.0.1',
                         ignoreTLS: true
                     });
 
                     connection.connect(function () {
-                        setTimeout(connection.quit.bind(connection), 100);
+                        setTimeout(() => connection.quit(), 100);
                     });
                 };
-                for (var i = 0; i < total; i++) {
+                for (let i = 0; i < total; i++) {
                     createConnection();
                 }
             });

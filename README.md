@@ -7,18 +7,7 @@ Create SMTP and LMTP server instances on the fly. This is not a full-blown serve
 [![Build Status](https://secure.travis-ci.org/andris9/smtp-server.svg)](http://travis-ci.org/andris9/Nodemailer)
 [![npm version](https://badge.fury.io/js/smtp-server.svg)](http://badge.fury.io/js/smtp-server)
 
-Requires Node v0.12 or iojs. The module does not run on Node v0.10 as it uses [Buffer.compare](http://nodejs.org/api/buffer.html#buffer_class_method_buffer_compare_buf1_buf2) and [TLSSocket](http://nodejs.org/api/tls.html#tls_new_tls_tlssocket_socket_options).
-
-## Other similar packages you might be interested in
-
-  * **[nodemailer](https://github.com/nodemailer/nodemailer)** – all in one package to send email from Node.js
-  * **[smtp-server](https://github.com/andris9/smtp-server)** – add SMTP server interface to your application
-  * **[smtp-connection](https://github.com/nodemailer/smtp-connection)** – connect to SMTP servers from your application
-  * **[zone-mta](https://github.com/zone-eu/zone-mta)** – full featured outbound MTA built using smtp-connection and smtp-server modules
-
-## Support smtp-server development
-
-[![Donate to author](https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=DB26KWR2BQX5W)
+> This module is part of the [Nodemailer bundle](https://nodemailer.com/about/pricing/). Starting from v2.0.0 *smtp-server* is licensed under the **[European Union Public License 1.1](http://ec.europa.eu/idabc/eupl.html)**. In general, EUPLv1.1 is a _copyleft_ license compatible with GPLv2, so if you're OK using GPL then you should be OK using *smtp-server*. Previous versions of *smtp-server* are licensed under the MIT license.
 
 ## Usage
 
@@ -28,12 +17,12 @@ Install with npm
 
 Require in your script
 
-    var SMTPServer = require('smtp-server').SMTPServer;
+    let SMTPServer = require('smtp-server').SMTPServer;
 
 ### Create SMTPServer instance
 
 ```javascript
-var server = new SMTPServer(options);
+let server = new SMTPServer(options);
 ```
 
 Where
@@ -86,7 +75,7 @@ If you use `secure: true` option or you do not disable STARTTLS command then you
 
 ```javascript
 // This example starts a SMTP server using TLS with your own certificate and key
-var server = new SMTPServer({
+let server = new SMTPServer({
     secure: true,
     key: fs.readFileSync('private.key'),
     cert: fs.readFileSync('server.crt')
@@ -111,7 +100,7 @@ Where
 Errors can be handled by setting an 'error' event listener to the server instance
 
 ```javascript
-server.on('error', function(err){
+server.on('error', err => {
     console.log('Error %s', err.message);
 });
 ```
@@ -121,8 +110,8 @@ server.on('error', function(err){
 Authentication calls can be handled with `onAuth` handler
 
 ```javascript
-var server = new SMTPServer({
-    onAuth: function(auth, session, callback){}
+let server = new SMTPServer({
+    onAuth(auth, session, callback){}
 });
 ```
 
@@ -148,8 +137,8 @@ This module supports `CRAM-MD5` but the use of it is discouraged as it requires 
 #### Password based authentication
 
 ```javascript
-var server = new SMTPServer({
-    onAuth: function(auth, session, callback){
+let server = new SMTPServer({
+    onAuth(auth, session, callback){
         if(auth.username !== 'abc' || auth.password !== 'def'){
             return callback(new Error('Invalid username or password'));
         }
@@ -164,9 +153,9 @@ XOAUTH2 support needs to enabled with the `authMethods` array option as it is di
 If you support multiple authentication mechanisms, then you can check the used mechanism from the `method` property.
 
 ```javascript
-var server = new SMTPServer({
+let server = new SMTPServer({
     authMethods: ['XOAUTH2'], // XOAUTH2 is not enabled by default
-    onAuth: function(auth, session, callback){
+    onAuth(auth, session, callback){
         if(auth.method !== 'XOAUTH2'){
             // should never occur in this case as only XOAUTH2 is allowed
             return callback(new Error('Expecting XOAUTH2'));
@@ -193,9 +182,9 @@ If you support multiple authentication mechanisms, then you can check the used m
 This authentication method does not return a password with the username but a response to a challenge. To validate the returned challenge response, the authentication object includes a method `validatePassword` that takes the actual plaintext password as an argument and returns either `true` if the password matches with the challenge response or `false` if it does not.
 
 ```javascript
-var server = new SMTPServer({
+let server = new SMTPServer({
     authMethods: ['CRAM-MD5'], // CRAM-MD5 is not enabled by default
-    onAuth: function(auth, session, callback){
+    onAuth(auth, session, callback){
         if(auth.method !== 'CRAM-MD5'){
             // should never occur in this case as only CRAM-MD5 is allowed
             return callback(new Error('Expecting CRAM-MD5'));
@@ -219,8 +208,8 @@ any other command, you can set a handler for it with `onConnect`
 
 
 ```javascript
-var server = new SMTPServer({
-    onConnect: function(session, callback){}
+let server = new SMTPServer({
+    onConnect(session, callback){}
 });
 ```
 
@@ -230,8 +219,8 @@ Where
   * **callback** is the function to run after validation. If you return an error object, the connection is rejected, otherwise it is accepted
 
 ```javascript
-var server = new SMTPServer({
-    onConnect: function(session, callback){
+let server = new SMTPServer({
+    onConnect(session, callback){
         if(session.remoteAddress === '127.0.0.1'){
             return callback(new Error('No connections from localhost allowed'));
         }
@@ -243,8 +232,8 @@ var server = new SMTPServer({
 If you also need to detect when a connection is closed use `onClose`. This method does not expect you to run a callback function as it is purely informational.
 
 ```javascript
-var server = new SMTPServer({
-    onClose: function(session){}
+let server = new SMTPServer({
+    onClose(session){}
 });
 ```
 
@@ -254,8 +243,8 @@ By default all sender addresses (as long as these are in valid email format) are
 the address before it is accepted you can set a handler for it with `onMailFrom`
 
 ```javascript
-var server = new SMTPServer({
-    onMailFrom: function(address, session, callback){}
+let server = new SMTPServer({
+    onMailFrom(address, session, callback){}
 });
 ```
 
@@ -266,8 +255,8 @@ Where
   * **callback** is the function to run after validation. If you return an error object, the address is rejected, otherwise it is accepted
 
 ```javascript
-var server = new SMTPServer({
-    onMailFrom: function(address, session, callback){
+let server = new SMTPServer({
+    onMailFrom(address, session, callback){
         if(address.address !== 'allowed@example.com'){
             return callback(new Error('Only allowed@example.com is allowed to send mail'));
         }
@@ -282,8 +271,8 @@ By default all recipient addresses (as long as these are in valid email format) 
 the address before it is accepted you can set a handler for it with `onRcptTo`
 
 ```javascript
-var server = new SMTPServer({
-    onRcptTo: function(address, session, callback){}
+let server = new SMTPServer({
+    onRcptTo(address, session, callback){}
 });
 ```
 
@@ -294,8 +283,8 @@ Where
   * **callback** is the function to run after validation. If you return an error object, the address is rejected, otherwise it is accepted
 
 ```javascript
-var server = new SMTPServer({
-    onRcptTo: function(address, session, callback){
+let server = new SMTPServer({
+    onRcptTo(address, session, callback){
         if(address.address !== 'allowed@example.com'){
             return callback(new Error('Only allowed@example.com is allowed to receive mail'));
         }
@@ -309,8 +298,8 @@ var server = new SMTPServer({
 You can get the stream for the incoming message with `onData` handler
 
 ```javascript
-var server = new SMTPServer({
-    onData: function(stream, session, callback){}
+let server = new SMTPServer({
+    onData(stream, session, callback){}
 });
 ```
 
@@ -318,11 +307,11 @@ Where
 
   * **stream** is a readable stream for the incoming message
   * **session** includes the `envelope` object and `user` data if logged in, see details [here](#session-object)
-  * **callback** is the function to run once the stream is ended and you have processed the outcome. If you return an error object, the message is rejected, otherwise it is accepted
+  * **callback** is the on to run once the stream is ended and you have processed the outcome. If you return an error object, the message is rejected, otherwise it is accepted
 
 ```javascript
-var server = new SMTPServer({
-    onData: function(stream, session, callback){
+let server = new SMTPServer({
+    onData(stream, session, callback){
         stream.pipe(process.stdout); // print message to console
         stream.on('end', callback);
     }
@@ -336,11 +325,11 @@ This module does not prepend `Received` or any other header field to the streame
 When creating the server you can define maximum allowed message size with the `size` option, see [RFC1870](https://tools.ietf.org/html/rfc1870) for details. This is not a strict limitation, the client is informed about the size limit but the client can still send a larger message than allowed, it is up to your application to reject or accept the oversized message. To check if the message was oversized, see `stream.sizeExceeded` property.
 
 ```javascript
-var server = new SMTPServer({
+let server = new SMTPServer({
     size: 1024, // allow messages up to 1 kb
-    onRcptTo: function (address, session, callback) {
+    onRcptTo(address, session, callback) {
         // do not accept messages larger than 100 bytes to specific recipients
-        var expectedSize = Number(session.envelope.mailFrom.args.SIZE) || 0;
+        let expectedSize = Number(session.envelope.mailFrom.args.SIZE) || 0;
         if (address.address === 'almost-full@example.com' &&  expectedSize > 100) {
             err = new Error('Insufficient channel storage: ' + address.address);
             err.responseCode = 452;
@@ -348,10 +337,10 @@ var server = new SMTPServer({
         }
         callback();
     },
-    onData: function(stream, session, callback){
+    onData(stream, session, callback){
         stream.pipe(process.stdout); // print message to console
-        stream.on('end', function(){
-            var err;
+        stream.on('end', () => {
+            let err;
             if(stream.sizeExceeded){
                 err = new Error('Message exceeds fixed maximum message size');
                 err.responseCode = 552;
@@ -375,13 +364,13 @@ of responses instead of a single error or success message. The array must contai
 envelope rcptTo array.
 
 ```javascript
-var server = new SMTPServer({
+let server = new SMTPServer({
     lmtp: true,
-    onData: function(stream, session, callback){
+    onData(stream, session, callback){
         stream.pipe(process.stdout); // print message to console
-        stream.on('end', function(){
+        stream.on('end', () => {
             // reject every other recipient
-            var response = session.envelope.rcptTo.map(function (rcpt, i) {
+            let response = session.envelope.rcptTo.map((rcpt, i) => {
                 if (i % 2) {
                     return new Error('<' + rcpt.address + '> Not accepted');
                 } else {
@@ -405,7 +394,7 @@ Session object that is passed to the handler functions includes the following pr
   * **clientHostname** reverse resolved hostname for *remoteAddress*
   * **openingCommand** the opening SMTP command (HELO/EHLO/LHLO)
   * **hostNameAppearsAs** hostname the client provided with HELO/EHLO call
-  * **envelope** includes denvelope data
+  * **envelope** includes envelope data
     * **mailFrom** includes an address object or is set to false
     * **rcptTo** includes an array of address objects
   * **user** includes the `user` value returned with the authentication handler

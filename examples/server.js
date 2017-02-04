@@ -3,10 +3,10 @@
 'use strict';
 
 // Replace '../lib/smtp-server' with 'smtp-server' when running this script outside this directory
-var SMTPServer = require('../lib/smtp-server').SMTPServer;
+const SMTPServer = require('../lib/smtp-server').SMTPServer;
 
-var SERVER_PORT = 2525;
-var SERVER_HOST = false;
+const SERVER_PORT = 2525;
+const SERVER_HOST = false;
 
 // Connect to this example server by running
 //   telnet localhost 2525
@@ -17,7 +17,7 @@ var SERVER_HOST = false;
 //   AUTH PLAIN dGVzdHVzZXIAdGVzdHVzZXIAdGVzdHBhc3M=
 
 // Setup server
-var server = new SMTPServer({
+const server = new SMTPServer({
 
     // log to console
     logger: true,
@@ -44,9 +44,9 @@ var server = new SMTPServer({
 
     // Setup authentication
     // Allow only users with username 'testuser' and password 'testpass'
-    onAuth: function (auth, session, callback) {
-        var username = 'testuser';
-        var password = 'testpass';
+    onAuth(auth, session, callback) {
+        let username = 'testuser';
+        let password = 'testpass';
 
         // check username and password
         if (auth.username === username &&
@@ -66,7 +66,7 @@ var server = new SMTPServer({
 
     // Validate MAIL FROM envelope address. Example allows all addresses that do not start with 'deny'
     // If this method is not set, all addresses are allowed
-    onMailFrom: function (address, session, callback) {
+    onMailFrom(address, session, callback) {
         if (/^deny/i.test(address.address)) {
             return callback(new Error('Not accepted'));
         }
@@ -75,8 +75,8 @@ var server = new SMTPServer({
 
     // Validate RCPT TO envelope address. Example allows all addresses that do not start with 'deny'
     // If this method is not set, all addresses are allowed
-    onRcptTo: function (address, session, callback) {
-        var err;
+    onRcptTo(address, session, callback) {
+        let err;
 
         if (/^deny/i.test(address.address)) {
             return callback(new Error('Not accepted'));
@@ -93,10 +93,10 @@ var server = new SMTPServer({
     },
 
     // Handle message stream
-    onData: function (stream, session, callback) {
+    onData(stream, session, callback) {
         stream.pipe(process.stdout);
-        stream.on('end', function () {
-            var err;
+        stream.on('end', () => {
+            let err;
             if (stream.sizeExceeded) {
                 err = new Error('Error: message exceeds fixed maximum message size 10 MB');
                 err.responseCode = 552;
@@ -107,7 +107,7 @@ var server = new SMTPServer({
     }
 });
 
-server.on('error', function (err) {
+server.on('error', err => {
     console.log('Error occurred');
     console.log(err);
 });

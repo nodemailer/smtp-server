@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.0 2017-02-04
+
+  * Changed license from MIT to EUPL-v1.1
+  * Rewrite to use ES6, this means at least Node.js v6.0.0 is required to use smtp-server
+
 ## v1.16.1 2016-10-17
 
   * Allowed rewriting `connect` method
