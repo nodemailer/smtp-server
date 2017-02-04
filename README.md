@@ -471,4 +471,4 @@ Most notably, the **ENHANCEDSTATUSCODES** extension is not supported, all respon
 
 ## License
 
-**MIT**
+**EUPLv1.1**
