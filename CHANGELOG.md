@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.1 2017-02-04
+
+  * Fixad a bug where `server.on('connect', data)` had missing `data`
+
 ## v2.0.0 2017-02-04
 
   * Changed license from MIT to EUPL-v1.1
