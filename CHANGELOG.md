@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.2 2017-02-17
+
+  * Fixad a bug where `server.onConnect(err)` did not close the connection
+
 ## v2.0.1 2017-02-04
 
   * Fixad a bug where `server.on('connect', data)` had missing `data`
