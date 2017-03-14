@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.3 2017-02-17
+
+  * Expose `secure` state in session
+
 ## v2.0.2 2017-02-17
 
   * Fixad a bug where `server.onConnect(err)` did not close the connection
