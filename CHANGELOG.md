@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.0.0 2017-04-06
+
+  * Reverted license back to MIT
+
 ## v2.0.3 2017-02-17
 
   * Expose `secure` state in session

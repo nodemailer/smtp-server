@@ -7,8 +7,6 @@ Create SMTP and LMTP server instances on the fly. This is not a full-blown serve
 [![Build Status](https://secure.travis-ci.org/andris9/smtp-server.svg)](http://travis-ci.org/andris9/Nodemailer)
 [![npm version](https://badge.fury.io/js/smtp-server.svg)](http://badge.fury.io/js/smtp-server)
 
-> This module is part of the [Nodemailer bundle](https://nodemailer.com/about/pricing/). Starting from v2.0.0 *smtp-server* is licensed under the **[European Union Public License 1.1](http://ec.europa.eu/idabc/eupl.html)**. In general, EUPLv1.1 is a _copyleft_ license compatible with GPLv2, so if you're OK using GPL then you should be OK using *smtp-server*. Previous versions of *smtp-server* are licensed under the MIT license.
-
 ## Usage
 
 Install with npm
@@ -471,4 +469,4 @@ Most notably, the **ENHANCEDSTATUSCODES** extension is not supported, all respon
 
 ## License
 
-**EUPLv1.1**
+**MIT**
