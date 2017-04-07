@@ -1,6 +1,6 @@
 {
   "name": "smtp-server",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Create custom SMTP servers on the fly",
   "main": "lib/smtp-server.js",
   "scripts": {
@@ -10,7 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "ipv6-normalize": "^1.0.1",
-    "nodemailer": "^3.1.1"
+    "nodemailer": "^4.0.0"
   },
   "devDependencies": {
     "chai": "^3.5.0",
