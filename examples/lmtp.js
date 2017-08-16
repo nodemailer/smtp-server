@@ -15,7 +15,6 @@ const SERVER_HOST = '0.0.0.0';
 
 // Setup server
 const server = new SMTPServer({
-
     // log to console
     logger: true,
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.1.0 2017-08-16
+
+  * Added new server option `needsUpgrade` to upgrade sockets to TLS immediately after connection is established. Works with secure: true
+
 ## v3.0.0 2017-04-06
 
   * Reverted license back to MIT
