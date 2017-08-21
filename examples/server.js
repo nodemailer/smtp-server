@@ -18,7 +18,6 @@ const SERVER_HOST = false;
 
 // Setup server
 const server = new SMTPServer({
-
     // log to console
     logger: true,
 
@@ -49,12 +48,11 @@ const server = new SMTPServer({
         let password = 'testpass';
 
         // check username and password
-        if (auth.username === username &&
-            (
-                auth.method === 'CRAM-MD5' ?
-                auth.validatePassword(password) : // if cram-md5, validate challenge response
-                auth.password === password // for other methods match plaintext passwords
-            )
+        if (
+            auth.username === username &&
+            (auth.method === 'CRAM-MD5'
+                ? auth.validatePassword(password) // if cram-md5, validate challenge response
+                : auth.password === password) // for other methods match plaintext passwords
         ) {
             return callback(null, {
                 user: 'userdata' // value could be an user id, or an user object etc. This value can be accessed from session.user afterwards
