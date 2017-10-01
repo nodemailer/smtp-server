@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.2.0 2017-10-01
+
+  * Return net.listen() value
+
 ## v3.1.0 2017-08-16
 
   * Added new server option `needsUpgrade` to upgrade sockets to TLS immediately after connection is established. Works with secure: true
