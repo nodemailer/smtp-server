@@ -9,6 +9,7 @@ const XOAuth2 = require('nodemailer/lib/xoauth2');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
 const SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
 const net = require('net');
+const pem = require('pem');
 
 const expect = chai.expect;
 const fs = require('fs');
@@ -605,6 +606,85 @@ describe('SMTPServer', function() {
 
             connection.connect(function() {
                 connection.quit();
+            });
+        });
+    });
+
+    describe('Secure server with cert update', function() {
+        let PORT = 1336;
+        let server;
+
+        beforeEach(function(done) {
+            pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                if (err) {
+                    return done(err);
+                }
+
+                server = new SMTPServer({
+                    secure: true,
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+                    logInfo: true
+                });
+
+                server.listen(PORT, '127.0.0.1', done);
+            });
+        });
+
+        afterEach(function(done) {
+            server.close(function() {
+                done();
+            });
+        });
+
+        it('should connect to secure server', function(done) {
+            let connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                secure: true,
+                tls: {
+                    rejectUnauthorized: false
+                }
+            });
+
+            let firstFingerprint;
+
+            connection.connect(() => {
+                firstFingerprint = connection._socket.getPeerCertificate().fingerprint;
+                connection.quit();
+            });
+
+            connection.on('end', () => {
+                pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                    if (err) {
+                        return done(err);
+                    }
+
+                    server.updateSecureContext({
+                        key: keys.serviceKey,
+                        cert: keys.certificate
+                    });
+
+                    setTimeout(() => {
+                        let connection = new Client({
+                            port: PORT,
+                            host: '127.0.0.1',
+                            secure: true,
+                            tls: {
+                                rejectUnauthorized: false
+                            }
+                        });
+
+                        connection.connect(() => {
+                            let secondFingerprint = connection._socket.getPeerCertificate().fingerprint;
+                            expect(firstFingerprint).to.not.equal(secondFingerprint);
+                            connection.quit();
+                        });
+
+                        connection.on('end', done);
+                    }, 1000);
+                });
             });
         });
     });

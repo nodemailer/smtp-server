@@ -1,6 +1,6 @@
 {
     "name": "smtp-server",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "description": "Create custom SMTP servers on the fly",
     "main": "lib/smtp-server.js",
     "scripts": {
@@ -10,7 +10,7 @@
     "license": "MIT",
     "dependencies": {
         "ipv6-normalize": "^1.0.1",
-        "nodemailer": "^4.1.1"
+        "nodemailer": "^4.1.2"
     },
     "devDependencies": {
         "chai": "^4.1.2",
@@ -18,8 +18,9 @@
         "grunt": "^1.0.1",
         "grunt-cli": "^1.2.0",
         "grunt-eslint": "^20.1.0",
-        "grunt-mocha-test": "^0.13.2",
-        "mocha": "^3.5.3"
+        "grunt-mocha-test": "^0.13.3",
+        "mocha": "^4.0.0",
+        "pem": "^1.12.0"
     },
     "repository": {
         "type": "git",
@@ -28,7 +29,9 @@
     "bugs": {
         "url": "https://github.com/andris9/smtp-server/issues"
     },
-    "keywords": ["SMTP"],
+    "keywords": [
+        "SMTP"
+    ],
     "engines": {
         "node": ">=6.0.0"
     }

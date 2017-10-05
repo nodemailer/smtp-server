@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.3.0 2017-10-05
+
+  * Added new method updateSecureContext({key, cert}) to update TLS options live
+
 ## v3.2.0 2017-10-01
 
   * Return net.listen() value
