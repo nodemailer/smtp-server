@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.4.0 2017-12-01
+
+* Added new property `secured` to indicate an TLS server where TLS is handled upstream
+* Allow handling TLS after PROXY header
+
 ## v3.3.1 2017-11-28
 
 * Do not choke on overly long reverse DNS call
