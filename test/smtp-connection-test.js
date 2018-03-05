@@ -9,6 +9,7 @@ const XOAuth2 = require('nodemailer/lib/xoauth2');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
 const SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
 const net = require('net');
+const pem = require('pem');
 
 const expect = chai.expect;
 const fs = require('fs');
@@ -605,6 +606,85 @@ describe('SMTPServer', function() {
 
             connection.connect(function() {
                 connection.quit();
+            });
+        });
+    });
+
+    describe('Secure server with cert update', function() {
+        let PORT = 1336;
+        let server;
+
+        beforeEach(function(done) {
+            pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                if (err) {
+                    return done(err);
+                }
+
+                server = new SMTPServer({
+                    secure: true,
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+                    logInfo: true
+                });
+
+                server.listen(PORT, '127.0.0.1', done);
+            });
+        });
+
+        afterEach(function(done) {
+            server.close(function() {
+                done();
+            });
+        });
+
+        it('should connect to secure server', function(done) {
+            let connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                secure: true,
+                tls: {
+                    rejectUnauthorized: false
+                }
+            });
+
+            let firstFingerprint;
+
+            connection.connect(() => {
+                firstFingerprint = connection._socket.getPeerCertificate().fingerprint;
+                connection.quit();
+            });
+
+            connection.on('end', () => {
+                pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                    if (err) {
+                        return done(err);
+                    }
+
+                    server.updateSecureContext({
+                        key: keys.serviceKey,
+                        cert: keys.certificate
+                    });
+
+                    setTimeout(() => {
+                        let connection = new Client({
+                            port: PORT,
+                            host: '127.0.0.1',
+                            secure: true,
+                            tls: {
+                                rejectUnauthorized: false
+                            }
+                        });
+
+                        connection.connect(() => {
+                            let secondFingerprint = connection._socket.getPeerCertificate().fingerprint;
+                            expect(firstFingerprint).to.not.equal(secondFingerprint);
+                            connection.quit();
+                        });
+
+                        connection.on('end', done);
+                    }, 1000);
+                });
             });
         });
     });
@@ -1300,6 +1380,65 @@ describe('SMTPServer', function() {
                     done();
                 });
                 socket.write('PROXY TCP4 1.2.3.4 203.0.113.7 35646 80\r\n');
+            });
+        });
+    });
+
+    describe('Secure PROXY server', function() {
+        let PORT = 1336;
+
+        let server = new SMTPServer({
+            maxClients: 5,
+            logger: false,
+            useProxy: true,
+            secure: true,
+            onConnect(session, callback) {
+                if (session.remoteAddress === '1.2.3.4') {
+                    let err = new Error('Blacklisted IP');
+                    err.responseCode = 421;
+                    return callback(err);
+                }
+                callback();
+            }
+        });
+
+        beforeEach(function(done) {
+            server.listen(PORT, '127.0.0.1', done);
+        });
+
+        afterEach(function(done) {
+            server.close(done);
+        });
+
+        it('should rewrite remote address value', function(done) {
+            let connection = new Client({
+                port: PORT,
+                host: '127.0.0.1',
+                tls: {
+                    rejectUnauthorized: false
+                }
+            });
+
+            connection.on('end', done);
+
+            connection.connect(function() {
+                let conn;
+                // get first connection
+                server.connections.forEach(function(val) {
+                    if (!conn) {
+                        conn = val;
+                    }
+                });
+                // default remote address should be overriden by the value from the PROXY header
+                expect(conn.remoteAddress).to.equal('198.51.100.22');
+                expect(conn.remotePort).to.equal(35646);
+                connection.quit();
+            });
+
+            connection._socket.write('PROXY TCP4 198.51.100.22 203.0.113.7 35646 80\r\n');
+            connection._upgradeConnection(err => {
+                expect(err).to.not.exist;
+                // server should respond with greeting after this point
             });
         });
     });
