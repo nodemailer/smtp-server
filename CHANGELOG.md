@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.4.2 2018-03-16
+
+* handle missing address in listener handler
+
 ## v3.4.0 2017-12-01
 
 * Added new property `secured` to indicate an TLS server where TLS is handled upstream
