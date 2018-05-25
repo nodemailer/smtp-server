@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.4.5 2018-05-25
+
+*   Expose connection id in 'connect' event
+
 ## v3.4.4 2018-05-04
 
 *   Enclose punycode calls in try..catch
