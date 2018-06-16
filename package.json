@@ -1,6 +1,6 @@
 {
     "name": "smtp-server",
-    "version": "3.4.5",
+    "version": "3.4.6",
     "description": "Create custom SMTP servers on the fly",
     "main": "lib/smtp-server.js",
     "scripts": {
@@ -11,14 +11,14 @@
     "dependencies": {
         "base32.js": "0.1.0",
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "4.6.5"
+        "nodemailer": "4.6.7"
     },
     "devDependencies": {
         "chai": "^4.1.2",
         "eslint-config-nodemailer": "^1.2.0",
-        "grunt": "^1.0.2",
+        "grunt": "^1.0.3",
         "grunt-cli": "^1.2.0",
-        "grunt-eslint": "^20.1.0",
+        "grunt-eslint": "^20.2.0",
         "grunt-mocha-test": "^0.13.3",
         "mocha": "^5.2.0",
         "pem": "^1.12.5"
