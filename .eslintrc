@@ -2,5 +2,5 @@
     "rules": {
         "indent": 0
     },
-    "extends": "nodemailer"
+    "extends": ["nodemailer", "prettier"]
 }
