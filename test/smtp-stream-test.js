@@ -13,7 +13,7 @@ describe('SMTPStream', function() {
     it('should emit commands', function(done) {
         let stream = new SMTPStream();
 
-        let expecting = [new Buffer([0x43, 0x4d, 0x44, 0x31]), new Buffer([0x43, 0x4d, 0x44, 0x32]), new Buffer([0x43, 0x4d, 0x44, 0x33])];
+        let expecting = [Buffer.from([0x43, 0x4d, 0x44, 0x31]), Buffer.from([0x43, 0x4d, 0x44, 0x32]), Buffer.from([0x43, 0x4d, 0x44, 0x33])];
 
         stream.oncommand = function(cmd, cb) {
             expect(cmd).to.deep.equal(expecting.shift());
