@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.6.0 2020-03-15
+
+-   Add remote address to any errors
+-   Bump dependencies to latest
+
 ## v3.5.0 2019-01-04
 
 -   Fix reverse resolving invalid hostname error where greeting was sent twice

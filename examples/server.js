@@ -20,6 +20,7 @@ const SERVER_HOST = false;
 const server = new SMTPServer({
     // log to console
     logger: true,
+    secure: true,
 
     // not required but nice-to-have
     banner: 'Welcome to My Awesome SMTP Server',
