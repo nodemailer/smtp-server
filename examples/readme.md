@@ -78,3 +78,10 @@ Email Content line 2
 [2016-10-31 12:00:01] DEBUG: [65HrQZWSqi4G] S: 221 Bye
 [2016-10-31 12:00:01] INFO: [65HrQZWSqi4G] Connection closed to [127.0.0.1]
 ```
+
+If you are not able to connect to port 25. Do the following
+
+```
+$ sudo setcap 'cap_net_bind_service=+ep' /usr/bin/node  # Give node permission to run to connect to port 25
+$ sudo kill -9 `sudo lsof -t -i:25`   # kill process running in port 25
+```
