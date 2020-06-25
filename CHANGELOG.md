@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.7.0 2020-06-25
+
+-   Bump dependencies to latest
+
 ## v3.6.0 2020-03-15
 
 -   Add remote address to any errors

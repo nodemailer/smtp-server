@@ -15,12 +15,12 @@ const fs = require('fs');
 
 chai.config.includeStack = true;
 
-describe('SMTPServer', function() {
+describe('SMTPServer', function () {
     this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
 
-    describe('Unit tests', function() {
-        describe('#_parseAddressCommand', function() {
-            it('should parse MAIL FROM/RCPT TO', function() {
+    describe('Unit tests', function () {
+        describe('#_parseAddressCommand', function () {
+            it('should parse MAIL FROM/RCPT TO', function () {
                 let conn = new SMTPConnection(
                     {
                         options: {}
@@ -58,7 +58,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Plaintext server', function() {
+    describe('Plaintext server', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -67,15 +67,15 @@ describe('SMTPServer', function() {
             socketTimeout: 2 * 1000
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        it('should connect without TLS', function(done) {
+        it('should connect without TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -84,12 +84,12 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 connection.quit();
             });
         });
 
-        it('should connect with TLS', function(done) {
+        it('should connect with TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -100,18 +100,18 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 connection.quit();
             });
         });
 
-        it('open multiple connections', function(done) {
+        it('open multiple connections', function (done) {
             let limit = 5;
             let disconnected = 0;
             let connected = 0;
             let connections = [];
 
-            let createConnection = function(callback) {
+            let createConnection = function (callback) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -120,31 +120,31 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                connection.on('error', function(err) {
+                connection.on('error', function (err) {
                     connected++;
                     expect(err).to.not.exist;
                     connection.close();
                 });
 
-                connection.on('end', function() {
+                connection.on('end', function () {
                     disconnected++;
                     if (disconnected >= limit) {
                         return done();
                     }
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connected++;
                     callback(null, connection);
                 });
             };
 
-            let connCb = function(err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
                 if (connected >= limit) {
-                    connections.forEach(function(connection) {
+                    connections.forEach(function (connection) {
                         connection.close();
                     });
                 }
@@ -155,14 +155,14 @@ describe('SMTPServer', function() {
             }
         });
 
-        it('should reject too many connections', function(done) {
+        it('should reject too many connections', function (done) {
             let limit = 7;
             let expectedErrors = 2;
             let disconnected = 0;
             let connected = 0;
             let connections = [];
 
-            let createConnection = function(callback) {
+            let createConnection = function (callback) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -171,7 +171,7 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                connection.on('error', function(err) {
+                connection.on('error', function (err) {
                     connected++;
                     if (!expectedErrors) {
                         expect(err).to.not.exist;
@@ -181,25 +181,25 @@ describe('SMTPServer', function() {
                     connection.close();
                 });
 
-                connection.on('end', function() {
+                connection.on('end', function () {
                     disconnected++;
                     if (disconnected >= limit) {
                         return done();
                     }
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connected++;
                     callback(null, connection);
                 });
             };
 
-            let connCb = function(err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
                 if (connected >= limit) {
-                    connections.forEach(function(connection) {
+                    connections.forEach(function (connection) {
                         connection.close();
                     });
                 }
@@ -210,25 +210,25 @@ describe('SMTPServer', function() {
             }
         });
 
-        it('should close on timeout', function(done) {
+        it('should close on timeout', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
             });
 
-            connection.on('error', function(err) {
+            connection.on('error', function (err) {
                 expect(err).to.exist;
             });
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 // do nothing, wait until timeout occurs
             });
         });
 
-        it('should close on timeout using secure socket', function(done) {
+        it('should close on timeout using secure socket', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -237,19 +237,19 @@ describe('SMTPServer', function() {
                 }
             });
 
-            connection.on('error', function(err) {
+            connection.on('error', function (err) {
                 expect(err).to.exist;
             });
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 // do nothing, wait until timeout occurs
             });
         });
     });
 
-    describe('Plaintext server with no connection limit', function() {
+    describe('Plaintext server with no connection limit', function () {
         this.timeout(60 * 1000); // eslint-disable-line no-invalid-this
 
         let PORT = 1336;
@@ -260,11 +260,11 @@ describe('SMTPServer', function() {
             closeTimeout: 6 * 1000
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        it('open multiple connections and close all at once', function(done) {
+        it('open multiple connections and close all at once', function (done) {
             let limit = 100;
             let cleanClose = 4;
 
@@ -272,7 +272,7 @@ describe('SMTPServer', function() {
             let connected = 0;
             let connections = [];
 
-            let createConnection = function(callback) {
+            let createConnection = function (callback) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -281,11 +281,11 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                connection.on('error', function(err) {
+                connection.on('error', function (err) {
                     expect(err.responseCode).to.equal(421); // Server shutting down
                 });
 
-                connection.on('end', function() {
+                connection.on('end', function () {
                     disconnected++;
 
                     if (disconnected >= limit) {
@@ -293,19 +293,19 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connected++;
                     callback(null, connection);
                 });
             };
 
-            let connCb = function(err, conn) {
+            let connCb = function (err, conn) {
                 expect(err).to.not.exist;
                 connections.push(conn);
 
                 if (connected >= limit) {
                     server.close();
-                    setTimeout(function() {
+                    setTimeout(function () {
                         for (let i = 0; i < cleanClose; i++) {
                             connections[i].quit();
                         }
@@ -319,7 +319,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Plaintext server with hidden STARTTLS', function() {
+    describe('Plaintext server with hidden STARTTLS', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -329,15 +329,15 @@ describe('SMTPServer', function() {
             socketTimeout: 2 * 1000
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        it('should connect without TLS', function(done) {
+        it('should connect without TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
@@ -345,13 +345,13 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 expect(connection.secure).to.be.false;
                 connection.quit();
             });
         });
 
-        it('should connect with TLS', function(done) {
+        it('should connect with TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -363,14 +363,14 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 expect(connection.secure).to.be.true;
                 connection.quit();
             });
         });
     });
 
-    describe('Plaintext server with no STARTTLS', function() {
+    describe('Plaintext server with no STARTTLS', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -392,15 +392,15 @@ describe('SMTPServer', function() {
             }
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        it('should connect without TLS', function(done) {
+        it('should connect without TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1'
@@ -408,13 +408,13 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 expect(connection.secure).to.be.false;
                 connection.quit();
             });
         });
 
-        it('should not connect with TLS', function(done) {
+        it('should not connect with TLS', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -426,38 +426,38 @@ describe('SMTPServer', function() {
 
             let error;
 
-            connection.on('error', function(err) {
+            connection.on('error', function (err) {
                 error = err;
             });
 
-            connection.on('end', function() {
+            connection.on('end', function () {
                 expect(error).to.exist;
                 done();
             });
 
-            connection.connect(function() {
+            connection.connect(function () {
                 // should not be called
                 expect(false).to.be.true;
                 connection.quit();
             });
         });
 
-        it('should close after too many unauthenticated commands', function(done) {
+        it('should close after too many unauthenticated commands', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
             });
 
-            connection.on('error', function(err) {
+            connection.on('error', function (err) {
                 expect(err).to.exist;
             });
 
             connection.on('end', done);
 
-            connection.connect(function() {
-                let looper = function() {
-                    connection._currentAction = function() {
+            connection.connect(function () {
+                let looper = function () {
+                    connection._currentAction = function () {
                         looper();
                     };
                     connection._sendCommand('NOOP');
@@ -466,30 +466,30 @@ describe('SMTPServer', function() {
             });
         });
 
-        it('should close after too many unrecognized commands', function(done) {
+        it('should close after too many unrecognized commands', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
                 ignoreTLS: true
             });
 
-            connection.on('error', function(err) {
+            connection.on('error', function (err) {
                 expect(err).to.exist;
             });
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 connection.login(
                     {
                         user: 'testuser',
                         pass: 'testpass'
                     },
-                    function(err) {
+                    function (err) {
                         expect(err).to.not.exist;
 
-                        let looper = function() {
-                            connection._currentAction = function() {
+                        let looper = function () {
+                            connection._currentAction = function () {
                                 looper();
                             };
                             connection._sendCommand('ZOOP');
@@ -500,13 +500,13 @@ describe('SMTPServer', function() {
             });
         });
 
-        it('should reject early talker', function(done) {
-            let socket = net.connect(PORT, '127.0.0.1', function() {
+        it('should reject early talker', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1', function () {
                 let buffers = [];
-                socket.on('data', function(chunk) {
+                socket.on('data', function (chunk) {
                     buffers.push(chunk);
                 });
-                socket.on('end', function() {
+                socket.on('end', function () {
                     let data = Buffer.concat(buffers).toString();
                     expect(/^421 /.test(data)).to.be.true;
                     done();
@@ -515,11 +515,11 @@ describe('SMTPServer', function() {
             });
         });
 
-        it('should reject HTTP requests', function(done) {
-            let socket = net.connect(PORT, '127.0.0.1', function() {
+        it('should reject HTTP requests', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1', function () {
                 let buffers = [];
                 let started = false;
-                socket.on('data', function(chunk) {
+                socket.on('data', function (chunk) {
                     buffers.push(chunk);
 
                     if (!started) {
@@ -527,7 +527,7 @@ describe('SMTPServer', function() {
                         socket.write('GET /path/file.html HTTP/1.0\r\nHost: www.example.com\r\n\r\n');
                     }
                 });
-                socket.on('end', function() {
+                socket.on('end', function () {
                     let data = Buffer.concat(buffers).toString();
                     expect(/^421 /m.test(data)).to.be.true;
                     done();
@@ -536,7 +536,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Secure server', function() {
+    describe('Secure server', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -544,17 +544,17 @@ describe('SMTPServer', function() {
             logger: false
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
-            server.close(function() {
+        afterEach(function (done) {
+            server.close(function () {
                 done();
             });
         });
 
-        it('should connect to secure server', function(done) {
+        it('should connect to secure server', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -566,13 +566,13 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 connection.quit();
             });
         });
     });
 
-    describe('Secure server with upgrade', function() {
+    describe('Secure server with upgrade', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -581,17 +581,17 @@ describe('SMTPServer', function() {
             logger: false
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
-            server.close(function() {
+        afterEach(function (done) {
+            server.close(function () {
                 done();
             });
         });
 
-        it('should connect to secure server', function(done) {
+        it('should connect to secure server', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -603,17 +603,17 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 connection.quit();
             });
         });
     });
 
-    describe('Secure server with cert update', function() {
+    describe('Secure server with cert update', function () {
         let PORT = 1336;
         let server;
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
                 if (err) {
                     return done(err);
@@ -631,13 +631,13 @@ describe('SMTPServer', function() {
             });
         });
 
-        afterEach(function(done) {
-            server.close(function() {
+        afterEach(function (done) {
+            server.close(function () {
                 done();
             });
         });
 
-        it('should connect to secure server', function(done) {
+        it('should connect to secure server', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -688,7 +688,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Authentication tests', function() {
+    describe('Authentication tests', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -724,16 +724,16 @@ describe('SMTPServer', function() {
             }
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        describe('PLAIN', function() {
-            it('should authenticate', function(done) {
+        describe('PLAIN', function () {
+            it('should authenticate', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -744,14 +744,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'testuser',
                             pass: 'testpass',
                             method: 'PLAIN'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -759,7 +759,7 @@ describe('SMTPServer', function() {
                 });
             });
 
-            it('should fail', function(done) {
+            it('should fail', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -770,14 +770,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'zzzz',
                             pass: 'yyyy',
                             method: 'PLAIN'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.exist;
                             connection.quit();
                         }
@@ -786,8 +786,8 @@ describe('SMTPServer', function() {
             });
         });
 
-        describe('LOGIN', function() {
-            it('should authenticate', function(done) {
+        describe('LOGIN', function () {
+            it('should authenticate', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -799,14 +799,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'testuser',
                             pass: 'testpass',
                             method: 'LOGIN'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -814,7 +814,7 @@ describe('SMTPServer', function() {
                 });
             });
 
-            it('should authenticate without STARTTLS', function(done) {
+            it('should authenticate without STARTTLS', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -824,14 +824,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'testuser',
                             pass: 'testpass',
                             method: 'LOGIN'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -839,7 +839,7 @@ describe('SMTPServer', function() {
                 });
             });
 
-            it('should fail', function(done) {
+            it('should fail', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -850,14 +850,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'zzzz',
                             pass: 'yyyy',
                             method: 'LOGIN'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.exist;
                             connection.quit();
                         }
@@ -866,8 +866,8 @@ describe('SMTPServer', function() {
             });
         });
 
-        describe('XOAUTH2', function() {
-            it('should authenticate', function(done) {
+        describe('XOAUTH2', function () {
+            it('should authenticate', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -878,7 +878,7 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             type: 'oauth2',
@@ -892,7 +892,7 @@ describe('SMTPServer', function() {
                                 false
                             )
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -900,7 +900,7 @@ describe('SMTPServer', function() {
                 });
             });
 
-            it('should fail', function(done) {
+            it('should fail', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -911,7 +911,7 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             type: 'oauth2',
@@ -925,7 +925,7 @@ describe('SMTPServer', function() {
                                 false
                             )
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.exist;
                             connection.quit();
                         }
@@ -934,8 +934,8 @@ describe('SMTPServer', function() {
             });
         });
 
-        describe('CRAM-MD5', function() {
-            it('should authenticate', function(done) {
+        describe('CRAM-MD5', function () {
+            it('should authenticate', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -946,14 +946,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'testuser',
                             pass: 'testpass',
                             method: 'CRAM-MD5'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -961,7 +961,7 @@ describe('SMTPServer', function() {
                 });
             });
 
-            it('should fail', function(done) {
+            it('should fail', function (done) {
                 let connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -972,14 +972,14 @@ describe('SMTPServer', function() {
 
                 connection.on('end', done);
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'zzzz',
                             pass: 'yyyy',
                             method: 'CRAM-MD5'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.exist;
                             connection.quit();
                         }
@@ -989,7 +989,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Mail tests', function() {
+    describe('Mail tests', function () {
         let PORT = 1336;
 
         let connection;
@@ -1001,7 +1001,7 @@ describe('SMTPServer', function() {
             size: 1024
         });
 
-        server.onAuth = function(auth, session, callback) {
+        server.onAuth = function (auth, session, callback) {
             if (auth.username === 'testuser' && auth.password === 'testpass') {
                 return callback(null, {
                     user: 'userdata'
@@ -1013,21 +1013,21 @@ describe('SMTPServer', function() {
             }
         };
 
-        server.onMailFrom = function(address, session, callback) {
+        server.onMailFrom = function (address, session, callback) {
             if (/^deny/i.test(address.address)) {
                 return callback(new Error('Not accepted'));
             }
             callback();
         };
 
-        server.onRcptTo = function(address, session, callback) {
+        server.onRcptTo = function (address, session, callback) {
             if (/^deny/i.test(address.address)) {
                 return callback(new Error('Not accepted'));
             }
             callback();
         };
 
-        server.onData = function(stream, session, callback) {
+        server.onData = function (stream, session, callback) {
             let chunks = [];
             let chunklen = 0;
 
@@ -1052,8 +1052,8 @@ describe('SMTPServer', function() {
             });
         };
 
-        beforeEach(function(done) {
-            server.listen(PORT, '127.0.0.1', function() {
+        beforeEach(function (done) {
+            server.listen(PORT, '127.0.0.1', function () {
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1',
@@ -1062,13 +1062,13 @@ describe('SMTPServer', function() {
                     }
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.login(
                         {
                             user: 'testuser',
                             pass: 'testpass'
                         },
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             done();
                         }
@@ -1077,21 +1077,21 @@ describe('SMTPServer', function() {
             });
         });
 
-        afterEach(function(done) {
-            connection.on('end', function() {
+        afterEach(function (done) {
+            connection.on('end', function () {
                 server.close(done);
             });
             connection.close();
         });
 
-        it('should send', function(done) {
+        it('should send', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['recipient@exmaple.com']
                 },
                 'testmessage',
-                function(err, status) {
+                function (err, status) {
                     expect(err).to.not.exist;
                     expect(status.accepted.length).to.equal(1);
                     expect(status.rejected.length).to.equal(0);
@@ -1100,14 +1100,14 @@ describe('SMTPServer', function() {
             );
         });
 
-        it('should reject single recipient', function(done) {
+        it('should reject single recipient', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['recipient@exmaple.com', 'deny-recipient@example.com']
                 },
                 'testmessage',
-                function(err, status) {
+                function (err, status) {
                     expect(err).to.not.exist;
                     expect(status.accepted.length).to.equal(1);
                     expect(status.rejected.length).to.equal(1);
@@ -1116,70 +1116,70 @@ describe('SMTPServer', function() {
             );
         });
 
-        it('should reject sender', function(done) {
+        it('should reject sender', function (done) {
             connection.send(
                 {
                     from: 'deny-sender@example.com',
                     to: ['recipient@exmaple.com']
                 },
                 'testmessage',
-                function(err) {
+                function (err) {
                     expect(err).to.exist;
                     done();
                 }
             );
         });
 
-        it('should reject recipients', function(done) {
+        it('should reject recipients', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['deny-recipient@exmaple.com']
                 },
                 'testmessage',
-                function(err) {
+                function (err) {
                     expect(err).to.exist;
                     done();
                 }
             );
         });
 
-        it('should reject message', function(done) {
+        it('should reject message', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['recipient@exmaple.com']
                 },
                 'deny-testmessage',
-                function(err) {
+                function (err) {
                     expect(err).to.exist;
                     done();
                 }
             );
         });
 
-        it('should reject too big message', function(done) {
+        it('should reject too big message', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['recipient@exmaple.com']
                 },
                 new Array(1000).join('testmessage'),
-                function(err) {
+                function (err) {
                     expect(err).to.exist;
                     done();
                 }
             );
         });
 
-        it('should send multiple messages', function(done) {
+        it('should send multiple messages', function (done) {
             connection.send(
                 {
                     from: 'sender@example.com',
                     to: ['recipient@exmaple.com']
                 },
                 'testmessage 1',
-                function(err, status) {
+                function (err, status) {
                     expect(err).to.not.exist;
                     expect(status.accepted.length).to.equal(1);
                     expect(status.rejected.length).to.equal(0);
@@ -1190,7 +1190,7 @@ describe('SMTPServer', function() {
                             to: ['recipient@exmaple.com']
                         },
                         'testmessage 2',
-                        function(err, status) {
+                        function (err, status) {
                             expect(err).to.not.exist;
                             expect(status.accepted.length).to.equal(1);
                             expect(status.rejected.length).to.equal(0);
@@ -1201,7 +1201,7 @@ describe('SMTPServer', function() {
                                     to: ['recipient@exmaple.com']
                                 },
                                 'deny-testmessage',
-                                function(err) {
+                                function (err) {
                                     expect(err).to.exist;
 
                                     connection.send(
@@ -1210,7 +1210,7 @@ describe('SMTPServer', function() {
                                             to: ['recipient@exmaple.com']
                                         },
                                         'testmessage 3',
-                                        function(err, status) {
+                                        function (err, status) {
                                             expect(err).to.not.exist;
                                             expect(status.accepted.length).to.equal(1);
                                             expect(status.rejected.length).to.equal(0);
@@ -1226,8 +1226,8 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('SMTPUTF8', function() {
-        it('should allow addresses with UTF-8 characters', function(done) {
+    describe('SMTPUTF8', function () {
+        it('should allow addresses with UTF-8 characters', function (done) {
             let utf8Address = 'δοκιμή@παράδειγμα.δοκιμή';
             let PORT = 1336;
 
@@ -1238,29 +1238,29 @@ describe('SMTPServer', function() {
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
 
-            server.onRcptTo = function(address, session, callback) {
+            server.onRcptTo = function (address, session, callback) {
                 expect(utf8Address).to.equal(address.address);
                 callback();
             };
 
-            server.listen(PORT, '127.0.0.1', function() {
+            server.listen(PORT, '127.0.0.1', function () {
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
                 });
 
-                connection.on('end', function() {
+                connection.on('end', function () {
                     server.close(done);
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.send(
                         {
                             from: 'sender@example.com',
                             to: [utf8Address]
                         },
                         'testmessage',
-                        function(err, status) {
+                        function (err, status) {
                             expect(err).to.not.exist;
                             expect(status.accepted.length).to.equal(1);
                             expect(status.rejected.length).to.equal(0);
@@ -1272,8 +1272,8 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('#onData', function() {
-        it('should accept a prematurely called continue callback', function(done) {
+    describe('#onData', function () {
+        it('should accept a prematurely called continue callback', function (done) {
             let PORT = 1336;
 
             let connection;
@@ -1283,29 +1283,29 @@ describe('SMTPServer', function() {
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
 
-            server.onData = function(stream, session, callback) {
+            server.onData = function (stream, session, callback) {
                 stream.pipe(fs.createWriteStream('/dev/null'));
                 callback();
             };
 
-            server.listen(PORT, '127.0.0.1', function() {
+            server.listen(PORT, '127.0.0.1', function () {
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
                 });
 
-                connection.on('end', function() {
+                connection.on('end', function () {
                     server.close(done);
                 });
 
-                connection.connect(function() {
+                connection.connect(function () {
                     connection.send(
                         {
                             from: 'sender@example.com',
                             to: ['receiver@example.com']
                         },
                         new Array(1024 * 1024).join('#'),
-                        function(err) {
+                        function (err) {
                             expect(err).to.not.exist;
                             connection.quit();
                         }
@@ -1315,7 +1315,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('PROXY server', function() {
+    describe('PROXY server', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -1332,15 +1332,15 @@ describe('SMTPServer', function() {
             }
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        it('should rewrite remote address value', function(done) {
+        it('should rewrite remote address value', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -1349,10 +1349,10 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 let conn;
                 // get first connection
-                server.connections.forEach(function(val) {
+                server.connections.forEach(function (val) {
                     if (!conn) {
                         conn = val;
                     }
@@ -1366,13 +1366,13 @@ describe('SMTPServer', function() {
             connection._socket.write('PROXY TCP4 198.51.100.22 203.0.113.7 35646 80\r\n');
         });
 
-        it('should block blacklisted connection', function(done) {
-            let socket = net.connect(PORT, '127.0.0.1', function() {
+        it('should block blacklisted connection', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1', function () {
                 let buffers = [];
-                socket.on('data', function(chunk) {
+                socket.on('data', function (chunk) {
                     buffers.push(chunk);
                 });
-                socket.on('end', function() {
+                socket.on('end', function () {
                     let data = Buffer.concat(buffers).toString();
                     expect(data.indexOf('421 ')).to.equal(0);
                     expect(data.indexOf('Blacklisted')).to.gte(4);
@@ -1383,7 +1383,7 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('Secure PROXY server', function() {
+    describe('Secure PROXY server', function () {
         let PORT = 1336;
 
         let server = new SMTPServer({
@@ -1401,15 +1401,15 @@ describe('SMTPServer', function() {
             }
         });
 
-        beforeEach(function(done) {
+        beforeEach(function (done) {
             server.listen(PORT, '127.0.0.1', done);
         });
 
-        afterEach(function(done) {
+        afterEach(function (done) {
             server.close(done);
         });
 
-        it('should rewrite remote address value', function(done) {
+        it('should rewrite remote address value', function (done) {
             let connection = new Client({
                 port: PORT,
                 host: '127.0.0.1',
@@ -1420,10 +1420,10 @@ describe('SMTPServer', function() {
 
             connection.on('end', done);
 
-            connection.connect(function() {
+            connection.connect(function () {
                 let conn;
                 // get first connection
-                server.connections.forEach(function(val) {
+                server.connections.forEach(function (val) {
                     if (!conn) {
                         conn = val;
                     }
@@ -1442,10 +1442,10 @@ describe('SMTPServer', function() {
         });
     });
 
-    describe('onClose handler', function() {
+    describe('onClose handler', function () {
         let PORT = 1336;
 
-        it('should detect once a connection is closed', function(done) {
+        it('should detect once a connection is closed', function (done) {
             let closed = 0;
             let total = 50;
             let server = new SMTPServer({
@@ -1459,15 +1459,15 @@ describe('SMTPServer', function() {
                 }
             });
 
-            server.listen(PORT, '127.0.0.1', function() {
-                let createConnection = function() {
+            server.listen(PORT, '127.0.0.1', function () {
+                let createConnection = function () {
                     let connection = new Client({
                         port: PORT,
                         host: '127.0.0.1',
                         ignoreTLS: true
                     });
 
-                    connection.connect(function() {
+                    connection.connect(function () {
                         setTimeout(() => connection.quit(), 100);
                     });
                 };
