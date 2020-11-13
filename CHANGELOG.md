@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.8.0 2020-11-13
+
+-   Bump dependencies to latest
+-   Access to challenge and challengeResponse (CRAM-MD5)
+
 ## v3.7.0 2020-06-25
 
 -   Bump dependencies to latest
