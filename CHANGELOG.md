@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.9.0 2021-06-01
+
+-   Bumped dependencies
+-   Added extra log entries for 'close' events
+
 ## v3.8.0 2020-11-13
 
 -   Bump dependencies to latest
