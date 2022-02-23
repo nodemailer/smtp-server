@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.10.0 2022-02-23
+
+-   Add missing space suffix to an empty 334 response
+-   Bumped dependencies
+
 ## v3.9.0 2021-06-01
 
 -   Bumped dependencies
