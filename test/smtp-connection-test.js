@@ -1284,7 +1284,8 @@ describe('SMTPServer', function () {
             });
 
             server.onData = function (stream, session, callback) {
-                stream.pipe(fs.createWriteStream('/dev/null'));
+                const nullDevice = process.platform === 'win32' ? '\\\\.\\NUL' : '/dev/null';
+                stream.pipe(fs.createWriteStream(nullDevice));
                 callback();
             };
 
