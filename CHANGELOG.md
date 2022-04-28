@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.11.0 2022-04-28
+
+-   Added github workflow for tests
+-   Removed Travis
+-   Fixed compatibility for Node v18
+-   Bumped deps
+
 ## v3.10.0 2022-02-23
 
 -   Add missing space suffix to an empty 334 response
