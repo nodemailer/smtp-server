@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.12.0 2023-05-24
+
+-   new option `authRequiredMessage`
+-   Bumped deps
+
 ## v3.11.0 2022-04-28
 
 -   Added github workflow for tests
