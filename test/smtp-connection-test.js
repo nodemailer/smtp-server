@@ -623,8 +623,7 @@ describe('SMTPServer', function () {
                     secure: true,
                     logger: false,
                     key: keys.serviceKey,
-                    cert: keys.certificate,
-                    logInfo: true
+                    cert: keys.certificate
                 });
 
                 server.listen(PORT, '127.0.0.1', done);
