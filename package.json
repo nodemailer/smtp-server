@@ -1,28 +1,28 @@
 {
     "name": "smtp-server",
-    "version": "3.12.0",
+    "version": "3.13.0",
     "description": "Create custom SMTP servers on the fly",
     "main": "lib/smtp-server.js",
     "scripts": {
         "test": "grunt"
     },
     "author": "Andris Reinman",
-    "license": "MIT",
+    "license": "MIT-0",
     "dependencies": {
         "base32.js": "0.1.0",
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "6.9.2"
+        "nodemailer": "6.9.4"
     },
     "devDependencies": {
         "chai": "4.3.7",
         "eslint-config-nodemailer": "1.2.0",
-        "eslint-config-prettier": "8.8.0",
+        "eslint-config-prettier": "9.0.0",
         "grunt": "1.6.1",
         "grunt-cli": "1.4.3",
-        "grunt-eslint": "24.1.0",
+        "grunt-eslint": "24.3.0",
         "grunt-mocha-test": "0.13.3",
         "mocha": "10.2.0",
-        "pem": "1.14.7"
+        "pem": "1.14.8"
     },
     "repository": {
         "type": "git",
@@ -35,6 +35,6 @@
         "SMTP"
     ],
     "engines": {
-        "node": ">=6.0.0"
+        "node": ">=12.0.0"
     }
 }

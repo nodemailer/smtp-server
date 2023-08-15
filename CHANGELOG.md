@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.13.0 2023-08-15
+
+-   new event handler `onSecure`
+-   specified license identifier in package.json (from `MIT` to `MIT-0`)
+
 ## v3.12.0 2023-05-24
 
 -   new option `authRequiredMessage`

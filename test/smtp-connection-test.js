@@ -1477,4 +1477,169 @@ describe('SMTPServer', function () {
             });
         });
     });
+
+    describe('onSecure handler', function () {
+        let PORT = 1336;
+
+        it('should detect once a connection is established with TLS', function (done) {
+            let server;
+            pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                if (err) {
+                    return done(err);
+                }
+
+                let secureCount = 0;
+
+                server = new SMTPServer({
+                    secure: true,
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+
+                    onSecure(socket, session, done) {
+                        expect(session).to.exist;
+                        expect(session.servername).to.equal('teretere1');
+                        secureCount++;
+                        done();
+                    }
+                });
+
+                server.listen(PORT, '127.0.0.1');
+
+                let connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    secure: true,
+                    tls: {
+                        rejectUnauthorized: false,
+                        servername: 'teretere1'
+                    }
+                });
+
+                connection.connect(function () {
+                    setTimeout(() => {
+                        connection.quit();
+                        server.close(() => {
+                            expect(secureCount).to.equal(1);
+                            done();
+                        });
+                    }, 100);
+                });
+
+                connection.on('error', err => {
+                    server.close(() => done(err));
+                });
+            });
+        });
+
+        it('should detect once a connection is upgraded to TLS', function (done) {
+            let server;
+            pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                if (err) {
+                    return done(err);
+                }
+
+                let secureCount = 0;
+
+                server = new SMTPServer({
+                    secure: false,
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+
+                    onSecure(socket, session, done) {
+                        expect(session).to.exist;
+                        expect(session.servername).to.equal('teretere2');
+                        secureCount++;
+                        done();
+                    },
+                    onConnect(session, done) {
+                        done();
+                    }
+                });
+
+                server.listen(PORT, '127.0.0.1');
+
+                let connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    secure: false,
+                    tls: {
+                        rejectUnauthorized: false,
+                        servername: 'teretere2'
+                    }
+                });
+
+                connection.connect(function () {
+                    setTimeout(() => {
+                        connection.quit();
+                        server.close(() => {
+                            expect(secureCount).to.equal(1);
+                            done();
+                        });
+                    }, 100);
+                });
+
+                connection.on('error', err => {
+                    server.close(() => done(err));
+                });
+            });
+        });
+
+        it('onSecure is not triggered for cleartext connections', function (done) {
+            let server;
+            pem.createCertificate({ days: 1, selfSigned: true }, (err, keys) => {
+                if (err) {
+                    return done(err);
+                }
+
+                let secureCount = 0;
+
+                server = new SMTPServer({
+                    secure: false,
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+
+                    onSecure(socket, session, done) {
+                        expect(session).to.exist;
+                        expect(session.servername).to.equal('teretere2');
+                        secureCount++;
+                        done();
+                    },
+
+                    onConnect(session, done) {
+                        done();
+                    }
+                });
+
+                server.listen(PORT, '127.0.0.1');
+
+                let connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    secure: false,
+                    ignoreTLS: true,
+                    tls: {
+                        rejectUnauthorized: false,
+                        servername: 'teretere2'
+                    }
+                });
+
+                connection.connect(function () {
+                    setTimeout(() => {
+                        connection.quit();
+                        server.close(() => {
+                            expect(secureCount).to.equal(0);
+                            done();
+                        });
+                    }, 100);
+                });
+
+                connection.on('error', err => {
+                    server.close(() => done(err));
+                });
+            });
+        });
+    });
 });
