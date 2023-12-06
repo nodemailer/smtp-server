@@ -11,12 +11,13 @@
     "dependencies": {
         "base32.js": "0.1.0",
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "6.9.4"
+        "nodemailer": "6.9.7",
+        "punycode": "^2.3.1"
     },
     "devDependencies": {
-        "chai": "4.3.7",
+        "chai": "4.3.10",
         "eslint-config-nodemailer": "1.2.0",
-        "eslint-config-prettier": "9.0.0",
+        "eslint-config-prettier": "9.1.0",
         "grunt": "1.6.1",
         "grunt-cli": "1.4.3",
         "grunt-eslint": "24.3.0",
