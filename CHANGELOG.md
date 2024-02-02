@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.13.1](https://github.com/nodemailer/smtp-server/compare/v3.13.0...v3.13.1) (2024-02-02)
+
+
+### Bug Fixes
+
+* **deploy:** added autorelease ([0dbc8e1](https://github.com/nodemailer/smtp-server/commit/0dbc8e11412982395283b354c90e9ab443a7232a))
+* **deps:** use punycode module ([438c617](https://github.com/nodemailer/smtp-server/commit/438c617d6ff46121fe76b90da2f1f34220ba7ae4))
+
 ## v3.13.0 2023-08-15
 
 -   new event handler `onSecure`
