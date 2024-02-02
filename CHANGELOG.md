@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.2](https://github.com/nodemailer/smtp-server/compare/v3.13.1...v3.13.2) (2024-02-02)
+
+
+### Bug Fixes
+
+* **release:** fixed Git URL on package.json ([5876626](https://github.com/nodemailer/smtp-server/commit/5876626aed6239ff0de4999fdf583febdda38744))
+
 ## [3.13.1](https://github.com/nodemailer/smtp-server/compare/v3.13.0...v3.13.1) (2024-02-02)
 
 
