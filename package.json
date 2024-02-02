@@ -28,10 +28,10 @@
     },
     "repository": {
         "type": "git",
-        "url": "git://github.com/andris9/smtp-server.git"
+        "url": "git://github.com/nodemailer/smtp-server.git"
     },
     "bugs": {
-        "url": "https://github.com/andris9/smtp-server/issues"
+        "url": "https://github.com/nodemailer/smtp-server/issues"
     },
     "keywords": [
         "SMTP"
