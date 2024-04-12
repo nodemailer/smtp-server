@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.4](https://github.com/nodemailer/smtp-server/compare/v3.13.3...v3.13.4) (2024-04-12)
+
+
+### Bug Fixes
+
+* **deps:** Bumped deps ([e096b12](https://github.com/nodemailer/smtp-server/commit/e096b129af13a2c2d4893a8690ba06fe00fe36d2))
+
 ## [3.13.3](https://github.com/nodemailer/smtp-server/compare/v3.13.2...v3.13.3) (2024-02-29)
 
 
