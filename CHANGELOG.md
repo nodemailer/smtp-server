@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.5](https://github.com/nodemailer/smtp-server/compare/v3.13.4...v3.13.5) (2024-09-08)
+
+
+### Bug Fixes
+
+* Replaced punycode with punycode.js ([4ccbcf2](https://github.com/nodemailer/smtp-server/commit/4ccbcf2f7d0daee0554c416be03d0eda7e2999f5))
+
 ## [3.13.4](https://github.com/nodemailer/smtp-server/compare/v3.13.3...v3.13.4) (2024-04-12)
 
 
