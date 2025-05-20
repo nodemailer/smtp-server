@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.6](https://github.com/nodemailer/smtp-server/compare/v3.13.5...v3.13.6) (2024-10-21)
+
+
+### Bug Fixes
+
+* **XFORWARD:** Fixed client hostname processing. Fixes [#147](https://github.com/nodemailer/smtp-server/issues/147) ([d518417](https://github.com/nodemailer/smtp-server/commit/d518417d0b9274cc45a5fde597142f79867d3eeb))
+
 ## [3.13.5](https://github.com/nodemailer/smtp-server/compare/v3.13.4...v3.13.5) (2024-09-08)
 
 
