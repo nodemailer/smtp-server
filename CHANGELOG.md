@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.13.7](https://github.com/nodemailer/smtp-server/compare/v3.13.6...v3.13.7) (2025-05-20)
+
+
+### Bug Fixes
+
+* bug with proxy ([#218](https://github.com/nodemailer/smtp-server/issues/218)) ([9515e38](https://github.com/nodemailer/smtp-server/commit/9515e38ae0a2c03a3bbd81e3db9991cb908110d7))
+* Bumped deps ([ce34da4](https://github.com/nodemailer/smtp-server/commit/ce34da43a76675689bd7a88c75ba6977d2984e21))
+
 ## [3.13.6](https://github.com/nodemailer/smtp-server/compare/v3.13.5...v3.13.6) (2024-10-21)
 
 
