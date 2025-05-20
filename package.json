@@ -12,7 +12,7 @@
     "dependencies": {
         "base32.js": "0.1.0",
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "6.9.15",
+        "nodemailer": "7.0.3",
         "punycode.js": "2.3.1"
     },
     "devDependencies": {

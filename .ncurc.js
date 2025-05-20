@@ -4,7 +4,8 @@ module.exports = {
         // Block package upgrades that moved to ESM
         'chai',
         // API changes in newer eslint versions
-        'grunt-eslint'
+        'grunt-eslint',
+        'eslint-config-prettier',
+        'mocha'
     ]
 };
-
