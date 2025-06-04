@@ -59,16 +59,20 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server', function () {
-        let PORT = 1336;
-
-        let server = new SMTPServer({
-            maxClients: 5,
-            logger: false,
-            socketTimeout: 2 * 1000
-        });
+        let PORT;
+        let server;
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server = new SMTPServer({
+                maxClients: 5,
+                logger: false,
+                socketTimeout: 2 * 1000
+            });
+            server.listen(0, '127.0.0.1', (err) => {
+              if (err) return done(err);
+              PORT = server.server.address().port;
+              done();
+            });
         });
 
         afterEach(function (done) {
@@ -320,17 +324,21 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server with hidden STARTTLS', function () {
-        let PORT = 1336;
-
-        let server = new SMTPServer({
-            maxClients: 5,
-            hideSTARTTLS: true,
-            logger: false,
-            socketTimeout: 2 * 1000
-        });
+        let PORT;
+        let server;
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server = new SMTPServer({
+                maxClients: 5,
+                hideSTARTTLS: true,
+                logger: false,
+                socketTimeout: 2 * 1000
+            });
+            server.listen(0, '127.0.0.1', (err) => {
+              if (err) return done(err);
+              PORT = server.server.address().port;
+              done();
+            });
         });
 
         afterEach(function (done) {
@@ -371,29 +379,33 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server with no STARTTLS', function () {
-        let PORT = 1336;
-
-        let server = new SMTPServer({
-            maxClients: 5,
-            disabledCommands: ['STARTTLS'],
-            logger: false,
-            socketTimeout: 2 * 1000,
-            onAuth(auth, session, callback) {
-                expect(session.tlsOptions).to.be.false;
-                if (auth.username === 'testuser' && auth.password === 'testpass') {
-                    return callback(null, {
-                        user: 'userdata'
-                    });
-                } else {
-                    return callback(null, {
-                        message: 'Authentication failed'
-                    });
-                }
-            }
-        });
+        let PORT;
+        let server;
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server = new SMTPServer({
+                maxClients: 5,
+                disabledCommands: ['STARTTLS'],
+                logger: false,
+                socketTimeout: 2 * 1000,
+                onAuth(auth, session, callback) {
+                    expect(session.tlsOptions).to.be.false;
+                    if (auth.username === 'testuser' && auth.password === 'testpass') {
+                        return callback(null, {
+                            user: 'userdata'
+                        });
+                    } else {
+                        return callback(null, {
+                            message: 'Authentication failed'
+                        });
+                    }
+                }
+            });
+            server.listen(0, '127.0.0.1', (err) => {
+              if (err) return done(err);
+              PORT = server.server.address().port;
+              done();
+            });
         });
 
         afterEach(function (done) {
@@ -688,43 +700,47 @@ describe('SMTPServer', function () {
     });
 
     describe('Authentication tests', function () {
-        let PORT = 1336;
+        let PORT;
+        let server;
 
-        let server = new SMTPServer({
-            maxClients: 5,
-            logger: false,
-            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
-            allowInsecureAuth: true,
-            onAuth(auth, session, callback) {
-                expect(session.tlsOptions).to.exist;
-                if (auth.method === 'XOAUTH2') {
-                    if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
+        beforeEach(function (done) {
+            server = new SMTPServer({
+                maxClients: 5,
+                logger: false,
+                authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2', 'CRAM-MD5'],
+                allowInsecureAuth: true,
+                onAuth(auth, session, callback) {
+                    expect(session.tlsOptions).to.exist;
+                    if (auth.method === 'XOAUTH2') {
+                        if (auth.username === 'testuser' && auth.accessToken === 'testtoken') {
+                            return callback(null, {
+                                user: 'userdata'
+                            });
+                        } else {
+                            return callback(null, {
+                                data: {
+                                    status: '401',
+                                    schemes: 'bearer mac',
+                                    scope: 'https://mail.google.com/'
+                                }
+                            });
+                        }
+                    } else if (auth.username === 'testuser' && (auth.method === 'CRAM-MD5' ? auth.validatePassword('testpass') : auth.password === 'testpass')) {
                         return callback(null, {
                             user: 'userdata'
                         });
                     } else {
                         return callback(null, {
-                            data: {
-                                status: '401',
-                                schemes: 'bearer mac',
-                                scope: 'https://mail.google.com/'
-                            }
+                            message: 'Authentication failed'
                         });
                     }
-                } else if (auth.username === 'testuser' && (auth.method === 'CRAM-MD5' ? auth.validatePassword('testpass') : auth.password === 'testpass')) {
-                    return callback(null, {
-                        user: 'userdata'
-                    });
-                } else {
-                    return callback(null, {
-                        message: 'Authentication failed'
-                    });
                 }
-            }
-        });
-
-        beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            });
+            server.listen(0, '127.0.0.1', (err) => {
+              if (err) return done(err);
+              PORT = server.server.address().port;
+              done();
+            });
         });
 
         afterEach(function (done) {
@@ -989,90 +1005,94 @@ describe('SMTPServer', function () {
     });
 
     describe('Mail tests', function () {
-        let PORT = 1336;
+        let PORT;
 
         let connection;
 
-        let server = new SMTPServer({
-            maxClients: 5,
-            logger: false,
-            authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
-            size: 1024
-        });
-
-        server.onAuth = function (auth, session, callback) {
-            if (auth.username === 'testuser' && auth.password === 'testpass') {
-                return callback(null, {
-                    user: 'userdata'
-                });
-            } else {
-                return callback(null, {
-                    message: 'Authentication failed'
-                });
-            }
-        };
-
-        server.onMailFrom = function (address, session, callback) {
-            if (/^deny/i.test(address.address)) {
-                return callback(new Error('Not accepted'));
-            }
-            callback();
-        };
-
-        server.onRcptTo = function (address, session, callback) {
-            if (/^deny/i.test(address.address)) {
-                return callback(new Error('Not accepted'));
-            }
-            callback();
-        };
-
-        server.onData = function (stream, session, callback) {
-            let chunks = [];
-            let chunklen = 0;
-
-            stream.on('data', chunk => {
-                chunks.push(chunk);
-                chunklen += chunk.length;
-            });
-
-            stream.on('end', () => {
-                let message = Buffer.concat(chunks, chunklen).toString();
-                let err;
-
-                if (/^deny/i.test(message)) {
-                    return callback(new Error('Not queued'));
-                } else if (stream.sizeExceeded) {
-                    err = new Error('Maximum allowed message size 1kB exceeded');
-                    err.statusCode = 552;
-                    return callback(err);
-                }
-
-                callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
-            });
-        };
+        let server;
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', function () {
-                connection = new Client({
-                    port: PORT,
-                    host: '127.0.0.1',
-                    tls: {
-                        rejectUnauthorized: false
-                    }
+            server = new SMTPServer({
+                maxClients: 5,
+                logger: false,
+                authMethods: ['PLAIN', 'LOGIN', 'XOAUTH2'],
+                size: 1024
+            });
+
+            server.onAuth = function (auth, session, callback) {
+                if (auth.username === 'testuser' && auth.password === 'testpass') {
+                    return callback(null, {
+                        user: 'userdata'
+                    });
+                } else {
+                    return callback(null, {
+                        message: 'Authentication failed'
+                    });
+                }
+            };
+
+            server.onMailFrom = function (address, session, callback) {
+                if (/^deny/i.test(address.address)) {
+                    return callback(new Error('Not accepted'));
+                }
+                callback();
+            };
+
+            server.onRcptTo = function (address, session, callback) {
+                if (/^deny/i.test(address.address)) {
+                    return callback(new Error('Not accepted'));
+                }
+                callback();
+            };
+
+            server.onData = function (stream, session, callback) {
+                let chunks = [];
+                let chunklen = 0;
+
+                stream.on('data', chunk => {
+                    chunks.push(chunk);
+                    chunklen += chunk.length;
                 });
 
-                connection.connect(function () {
-                    connection.login(
-                        {
-                            user: 'testuser',
-                            pass: 'testpass'
-                        },
-                        function (err) {
-                            expect(err).to.not.exist;
-                            done();
-                        }
-                    );
+                stream.on('end', () => {
+                    let message = Buffer.concat(chunks, chunklen).toString();
+                    let err;
+
+                    if (/^deny/i.test(message)) {
+                        return callback(new Error('Not queued'));
+                    } else if (stream.sizeExceeded) {
+                        err = new Error('Maximum allowed message size 1kB exceeded');
+                        err.statusCode = 552;
+                        return callback(err);
+                    }
+
+                    callback(null, 'Message queued as abcdef'); // accept the message once the stream is ended
                 });
+            };
+
+            server.listen(0, '127.0.0.1', (err) => {
+              if (err) return done(err);
+              PORT = server.server.address().port;
+              connection = new Client({
+                  port: PORT,
+                  host: '127.0.0.1',
+                  tls: {
+                      rejectUnauthorized: false
+                  }
+              });
+
+              connection.connect(function () {
+                  connection.login(
+                      {
+                          user: 'testuser',
+                          pass: 'testpass'
+                      },
+                      function (err) {
+                          expect(err).to.not.exist;
+                          done();
+                      }
+                  );
+              });
             });
         });
 
