@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.13.8](https://github.com/nodemailer/smtp-server/compare/v3.13.7...v3.13.8) (2025-06-04)
+
+
+### Bug Fixes
+
+* added resolver option, if server closing do not permit commands (fixes [#177](https://github.com/nodemailer/smtp-server/issues/177), fixes [#181](https://github.com/nodemailer/smtp-server/issues/181)) ([#222](https://github.com/nodemailer/smtp-server/issues/222)) ([e79cac9](https://github.com/nodemailer/smtp-server/commit/e79cac9369dbca97cc47a24371151886ea60695e))
+
 ## [3.13.7](https://github.com/nodemailer/smtp-server/compare/v3.13.6...v3.13.7) (2025-05-20)
 
 
