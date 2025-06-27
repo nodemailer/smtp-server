@@ -78,7 +78,8 @@ describe('DSN (Delivery Status Notification) Support', function () {
     describe('EHLO Response', function () {
         it('should include ENHANCEDSTATUSCODES in features list', function (done) {
             let server = new SMTPServer({
-                disabledCommands: ['AUTH']
+                disabledCommands: ['AUTH'],
+                hideENHANCEDSTATUSCODES: false
             });
 
             // Mock connection for testing EHLO handler
@@ -159,6 +160,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
     describe('MAIL FROM DSN Parameter Validation', function () {
         it('should accept valid RET=FULL parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     expect(session.envelope.dsn.ret).to.equal('FULL');
                     expect(address.args.RET).to.equal('FULL');
@@ -193,6 +195,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject invalid RET parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 }
@@ -226,6 +229,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should accept ENVID parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     expect(session.envelope.dsn.envid).to.equal('test-envelope-123');
                     expect(address.args.ENVID).to.equal('test-envelope-123');
@@ -262,6 +266,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
     describe('RCPT TO DSN Parameter Validation', function () {
         it('should accept valid NOTIFY=SUCCESS parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -300,6 +305,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject invalid NOTIFY parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -337,6 +343,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject NOTIFY=NEVER combined with other values', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -374,6 +381,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should accept ORCPT parameter', function (done) {
             let server = new SMTPServer({
+                hideENHANCEDSTATUSCODES: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
