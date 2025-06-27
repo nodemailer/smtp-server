@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.14.0](https://github.com/nodemailer/smtp-server/compare/v3.13.8...v3.14.0) (2025-06-27)
+
+
+### Features
+
+* added support for ENHANCEDSTATUSCODES and DSN (closes [#224](https://github.com/nodemailer/smtp-server/issues/224)) ([#225](https://github.com/nodemailer/smtp-server/issues/225)) ([ad545ef](https://github.com/nodemailer/smtp-server/commit/ad545ef0904b388aa3b98d2156eac5a8e7bfeba0))
+
 ## [3.13.8](https://github.com/nodemailer/smtp-server/compare/v3.13.7...v3.13.8) (2025-06-04)
 
 
