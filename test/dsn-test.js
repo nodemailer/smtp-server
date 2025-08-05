@@ -70,8 +70,6 @@ describe('DSN (Delivery Status Notification) Support', function () {
             expect(conn.session.envelope.dsn).to.exist;
             expect(conn.session.envelope.dsn.ret).to.be.null;
             expect(conn.session.envelope.dsn.envid).to.be.null;
-            expect(conn.session.envelope.dsn.notify).to.be.an('array');
-            expect(conn.session.envelope.dsn.orcpt).to.be.an('array');
         });
     });
 

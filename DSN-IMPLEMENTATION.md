@@ -28,15 +28,31 @@ This patch adds comprehensive DSN (Delivery Status Notification) support to the 
 
 ### 4. Session Data Structure
 Enhanced the session envelope to include DSN information:
+
 ```javascript
 session.envelope = {
     mailFrom: false,
-    rcptTo: [],
+    rcptTo: [
+      {
+        "address": "foo@foo.com",
+        "args": {
+          "NOTIFY": "SUCCESS,FAILURE,DELAY",
+          "ORCPT": "rfc822;foo@foo.com"
+        },
+        "dsn": {
+          "notify": [
+            "SUCCESS",
+            "FAILURE",
+            "DELAY"
+          ],
+          "orcpt": "rfc822;foo@foo.com"
+        },
+        "name": ""
+      }
+    ],
     dsn: {
-        ret: null,      // RET parameter from MAIL FROM (FULL or HDRS)
-        envid: null,    // ENVID parameter from MAIL FROM
-        notify: [],     // NOTIFY parameters from RCPT TO commands
-        orcpt: []       // ORCPT parameters from RCPT TO commands
+        ret: 'FULL',                      // RET parameter from MAIL FROM (FULL or HDRS)
+        envid: 'TEST-ENVELOPE-IDENTIFIER' // ENVID parameter from MAIL FROM
     }
 }
 ```
