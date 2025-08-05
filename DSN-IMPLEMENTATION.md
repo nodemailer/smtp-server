@@ -7,8 +7,8 @@ This patch adds comprehensive DSN (Delivery Status Notification) support to the 
 ## Changes Made
 
 ### 1. EHLO Response Enhancement
-- Added `ENHANCEDSTATUSCODES` extension to the EHLO response
-- The extension can be hidden using the `hideENHANCEDSTATUSCODES` option
+- Added `DSN` extension to the EHLO response
+- The extension can be hidden using the `hideDSN` option
 
 ### 2. MAIL FROM DSN Parameters
 - **RET Parameter**: Accepts `FULL` or `HDRS` values
@@ -45,12 +45,12 @@ session.envelope = {
 - RET parameter must be either "FULL" or "HDRS"
 - NOTIFY parameter values must be valid (SUCCESS, FAILURE, DELAY, NEVER)
 - NOTIFY=NEVER cannot be combined with other values
-- All DSN parameters are only processed when ENHANCEDSTATUSCODES extension is supported
+- All DSN parameters are only processed when DSN extension is supported
 
 ## Files Modified
 
 1. **lib/smtp-connection.js**
-   - Added ENHANCEDSTATUSCODES to EHLO response
+   - Added DSN to EHLO response
    - Enhanced `_resetSession()` to include DSN data structure
    - Modified `handler_MAIL()` to process RET and ENVID parameters
    - Modified `handler_RCPT()` to process NOTIFY and ORCPT parameters
@@ -58,7 +58,7 @@ session.envelope = {
 
 2. **test/dsn-test.js** (NEW)
    - Comprehensive test suite for DSN functionality
-   - Tests for EHLO response with ENHANCEDSTATUSCODES
+   - Tests for EHLO response with DSN
    - Tests for MAIL FROM DSN parameter validation
    - Tests for RCPT TO DSN parameter validation
    - Unit tests for parameter parsing
@@ -77,7 +77,7 @@ DATA
 ### Hiding DSN Extension
 ```javascript
 const server = new SMTPServer({
-    hideENHANCEDSTATUSCODES: true,
+    hideDSN: true,
     // ... other options
 });
 ```
@@ -86,7 +86,7 @@ const server = new SMTPServer({
 
 This implementation maintains full backward compatibility:
 - Existing code will continue to work without changes
-- DSN parameters are optional and ignored if ENHANCEDSTATUSCODES is not advertised
+- DSN parameters are optional and ignored if DSN is not advertised
 - All existing SMTP functionality remains unchanged
 
 ## RFC Compliance
