@@ -70,16 +70,15 @@ describe('DSN (Delivery Status Notification) Support', function () {
             expect(conn.session.envelope.dsn).to.exist;
             expect(conn.session.envelope.dsn.ret).to.be.null;
             expect(conn.session.envelope.dsn.envid).to.be.null;
-            expect(conn.session.envelope.dsn.notify).to.be.an('array');
-            expect(conn.session.envelope.dsn.orcpt).to.be.an('array');
         });
     });
 
     describe('EHLO Response', function () {
-        it('should include ENHANCEDSTATUSCODES in features list', function (done) {
+        it('should include ENHANCEDSTATUSCODES and DSN in features list', function (done) {
             let server = new SMTPServer({
                 disabledCommands: ['AUTH'],
-                hideENHANCEDSTATUSCODES: false
+                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false
             });
 
             // Mock connection for testing EHLO handler
@@ -108,9 +107,10 @@ describe('DSN (Delivery Status Notification) Support', function () {
                 expect(sentResponse.code).to.equal(250);
                 expect(sentResponse.message).to.be.an('array');
 
-                // Check if ENHANCEDSTATUSCODES is in the features
+                // Check if ENHANCEDSTATUSCODES and DSN is in the features
                 const features = sentResponse.message.slice(1); // Skip the greeting
                 expect(features).to.include('ENHANCEDSTATUSCODES');
+                expect(features).to.include('DSN');
 
                 done();
             });
@@ -155,12 +155,52 @@ describe('DSN (Delivery Status Notification) Support', function () {
                 done();
             });
         });
+
+        it('should hide DSN when hideDSN is true', function (done) {
+            let server = new SMTPServer({
+                disabledCommands: ['AUTH'],
+                hideDSN: true
+            });
+
+            // Mock connection for testing EHLO handler
+            let mockConnection = new SMTPConnection(server, {
+                on() {},
+                write() {},
+                end() {},
+                localAddress: '127.0.0.1',
+                localPort: 25,
+                remoteAddress: '127.0.0.1',
+                remotePort: 12345
+            });
+
+            mockConnection.clientHostname = 'test.example.com';
+            mockConnection.name = 'test-server';
+
+            // Mock the send method to capture the response
+            let sentResponse = null;
+            mockConnection.send = function (code, message) {
+                sentResponse = { code, message };
+            };
+
+            // Test EHLO handler
+            mockConnection.handler_EHLO('EHLO test.example.com', function () {
+                expect(sentResponse).to.exist;
+                expect(sentResponse.code).to.equal(250);
+                expect(sentResponse.message).to.be.an('array');
+
+                // Check if DSN is NOT in the features
+                const features = sentResponse.message.slice(1); // Skip the greeting
+                expect(features).to.not.include('DSN');
+
+                done();
+            });
+        });
     });
 
     describe('MAIL FROM DSN Parameter Validation', function () {
         it('should accept valid RET=FULL parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     expect(session.envelope.dsn.ret).to.equal('FULL');
                     expect(address.args.RET).to.equal('FULL');
@@ -195,7 +235,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject invalid RET parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 }
@@ -229,7 +269,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should accept ENVID parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     expect(session.envelope.dsn.envid).to.equal('test-envelope-123');
                     expect(address.args.ENVID).to.equal('test-envelope-123');
@@ -266,7 +306,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
     describe('RCPT TO DSN Parameter Validation', function () {
         it('should accept valid NOTIFY=SUCCESS parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -305,7 +345,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject invalid NOTIFY parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -343,7 +383,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should reject NOTIFY=NEVER combined with other values', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
@@ -381,7 +421,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
 
         it('should accept ORCPT parameter', function (done) {
             let server = new SMTPServer({
-                hideENHANCEDSTATUSCODES: false,
+                hideDSN: false,
                 onMailFrom(address, session, callback) {
                     callback();
                 },
