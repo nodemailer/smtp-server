@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.15.0](https://github.com/nodemailer/smtp-server/compare/v3.14.0...v3.15.0) (2025-10-09)
+
+
+### Features
+
+* added DSN capability to feature list (disabled by default) ([#230](https://github.com/nodemailer/smtp-server/issues/230)) ([bb17377](https://github.com/nodemailer/smtp-server/commit/bb17377f47830b1d8ebb414c7c7420b1317b5e0c))
+
+
+### Bug Fixes
+
+* bumped deps ([c499a3c](https://github.com/nodemailer/smtp-server/commit/c499a3c18e6df6563ac02593f8b053073de5fc84))
+
 ## [3.14.0](https://github.com/nodemailer/smtp-server/compare/v3.13.8...v3.14.0) (2025-06-27)
 
 
