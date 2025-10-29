@@ -262,7 +262,7 @@ describe('DSN (Delivery Status Notification) Support', function () {
             mockConnection.handler_MAIL('MAIL FROM:<test@example.com> RET=INVALID', function () {
                 expect(sentResponse).to.exist;
                 expect(sentResponse.code).to.equal(501);
-                expect(sentResponse.message).to.include('RET parameter must be FULL or HDRS');
+                expect(sentResponse.message).to.include('Invalid RET parameter');
                 done();
             });
         });

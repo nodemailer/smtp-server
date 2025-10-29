@@ -111,7 +111,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
 
             conn._resetSession();
 
-            expect(conn.session.envelope.bodyType).to.equal('7BIT');
+            expect(conn.session.envelope.bodyType).to.equal('7bit');
             expect(conn.session.envelope.smtpUtf8).to.equal(false);
             expect(conn.session.envelope.requireTLS).to.equal(false);
         });
@@ -230,7 +230,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
                 disabledCommands: ['AUTH'],
                 authOptional: true,
                 onMailFrom: (address, session, callback) => {
-                    expect(session.envelope.bodyType).to.equal('8BITMIME');
+                    expect(session.envelope.bodyType).to.equal('8bitmime');
                     callback();
                 }
             });
@@ -273,7 +273,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
             mockConnection._resetSession();
             mockConnection.send = (code, message) => {
                 expect(code).to.equal(501);
-                expect(message).to.include('BODY parameter must be');
+                expect(message).to.include('Invalid BODY parameter');
                 done();
             };
 
@@ -328,7 +328,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
             mockConnection._resetSession();
             mockConnection.send = (code, message) => {
                 expect(code).to.equal(501);
-                expect(message).to.include('does not take a value');
+                expect(message).to.include('does not accept a value');
                 done();
             };
 
@@ -387,7 +387,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
             mockConnection.secure = false; // Not secure
             mockConnection.send = (code, message) => {
                 expect(code).to.equal(530);
-                expect(message).to.include('requires TLS connection');
+                expect(message).to.include('not permitted on non-TLS');
                 done();
             };
 
@@ -400,7 +400,7 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
                 authOptional: true,
                 hideREQUIRETLS: false,
                 onMailFrom: (address, session, callback) => {
-                    expect(session.envelope.bodyType).to.equal('8BITMIME');
+                    expect(session.envelope.bodyType).to.equal('8bitmime');
                     expect(session.envelope.smtpUtf8).to.equal(true);
                     expect(session.envelope.requireTLS).to.equal(true);
                     callback();
