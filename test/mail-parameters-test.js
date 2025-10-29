@@ -10,11 +10,9 @@ const expect = chai.expect;
 
 chai.config.includeStack = true;
 
-/* eslint-disable prefer-arrow-callback */
 describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
     this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
 
-    /* eslint-disable prefer-arrow-callback */
     describe('Unit Tests for Parameter Parsing', function () {
         it('should parse BODY parameter in _parseAddressCommand', () => {
             let conn = new SMTPConnection(
@@ -94,7 +92,6 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
             });
         });
     });
-    /* eslint-disable prefer-arrow-callback */
 
     describe('Session Data Structure', function () {
         it('should initialize parameter fields in session envelope', () => {
@@ -117,7 +114,6 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
         });
     });
 
-    /* eslint-disable prefer-arrow-callback */
     describe('EHLO Response', function () {
         it('should include 8BITMIME and SMTPUTF8 in features list', done => {
             let server = new SMTPServer({
@@ -224,7 +220,6 @@ describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
     });
 
     describe('MAIL FROM Parameter Validation', function () {
-    /* eslint-disable prefer-arrow-callback */
         it('should accept valid BODY=8BITMIME parameter', done => {
             let server = new SMTPServer({
                 disabledCommands: ['AUTH'],

@@ -68,10 +68,10 @@ describe('SMTPServer', function () {
                 logger: false,
                 socketTimeout: 2 * 1000
             });
-            server.listen(0, '127.0.0.1', (err) => {
-              if (err) return done(err);
-              PORT = server.server.address().port;
-              done();
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                done();
             });
         });
 
@@ -334,10 +334,10 @@ describe('SMTPServer', function () {
                 logger: false,
                 socketTimeout: 2 * 1000
             });
-            server.listen(0, '127.0.0.1', (err) => {
-              if (err) return done(err);
-              PORT = server.server.address().port;
-              done();
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                done();
             });
         });
 
@@ -401,10 +401,10 @@ describe('SMTPServer', function () {
                     }
                 }
             });
-            server.listen(0, '127.0.0.1', (err) => {
-              if (err) return done(err);
-              PORT = server.server.address().port;
-              done();
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                done();
             });
         });
 
@@ -725,7 +725,10 @@ describe('SMTPServer', function () {
                                 }
                             });
                         }
-                    } else if (auth.username === 'testuser' && (auth.method === 'CRAM-MD5' ? auth.validatePassword('testpass') : auth.password === 'testpass')) {
+                    } else if (
+                        auth.username === 'testuser' &&
+                        (auth.method === 'CRAM-MD5' ? auth.validatePassword('testpass') : auth.password === 'testpass')
+                    ) {
                         return callback(null, {
                             user: 'userdata'
                         });
@@ -736,10 +739,10 @@ describe('SMTPServer', function () {
                     }
                 }
             });
-            server.listen(0, '127.0.0.1', (err) => {
-              if (err) return done(err);
-              PORT = server.server.address().port;
-              done();
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                done();
             });
         });
 
@@ -1070,29 +1073,29 @@ describe('SMTPServer', function () {
                 });
             };
 
-            server.listen(0, '127.0.0.1', (err) => {
-              if (err) return done(err);
-              PORT = server.server.address().port;
-              connection = new Client({
-                  port: PORT,
-                  host: '127.0.0.1',
-                  tls: {
-                      rejectUnauthorized: false
-                  }
-              });
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1',
+                    tls: {
+                        rejectUnauthorized: false
+                    }
+                });
 
-              connection.connect(function () {
-                  connection.login(
-                      {
-                          user: 'testuser',
-                          pass: 'testpass'
-                      },
-                      function (err) {
-                          expect(err).to.not.exist;
-                          done();
-                      }
-                  );
-              });
+                connection.connect(function () {
+                    connection.login(
+                        {
+                            user: 'testuser',
+                            pass: 'testpass'
+                        },
+                        function (err) {
+                            expect(err).to.not.exist;
+                            done();
+                        }
+                    );
+                });
             });
         });
 

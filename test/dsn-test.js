@@ -32,7 +32,9 @@ describe('DSN (Delivery Status Notification) Support', function () {
             });
 
             // Test RCPT TO with DSN parameters
-            expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<recipient@example.com> NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;original@example.com')).to.deep.equal({
+            expect(
+                conn._parseAddressCommand('RCPT TO', 'RCPT TO:<recipient@example.com> NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;original@example.com')
+            ).to.deep.equal({
                 address: 'recipient@example.com',
                 args: {
                     NOTIFY: 'SUCCESS,FAILURE',
@@ -459,4 +461,3 @@ describe('DSN (Delivery Status Notification) Support', function () {
         });
     });
 });
-

@@ -5,6 +5,7 @@
     "main": "lib/smtp-server.js",
     "scripts": {
         "test": "grunt",
+        "format": "prettier --write \"**/*.{js,json,md}\"",
         "update": "rm -rf node_modules package-lock.json && ncu -u && npm install"
     },
     "author": "Andris Reinman",
@@ -17,14 +18,16 @@
     },
     "devDependencies": {
         "chai": "4.4.1",
+        "eslint": "^9.38.0",
         "eslint-config-nodemailer": "1.2.0",
-        "eslint-config-prettier": "9.1.0",
+        "eslint-config-prettier": "^10.1.8",
         "grunt": "1.6.1",
         "grunt-cli": "1.5.0",
-        "grunt-eslint": "24.3.0",
+        "grunt-eslint": "^26.0.0",
         "grunt-mocha-test": "0.13.3",
         "mocha": "10.7.3",
-        "pem": "1.14.8"
+        "pem": "1.14.8",
+        "prettier": "^3.6.2"
     },
     "repository": {
         "type": "git",

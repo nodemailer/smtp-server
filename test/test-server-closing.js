@@ -30,7 +30,7 @@ server.listen(0, '127.0.0.1', () => {
         console.log('Client connected to server');
 
         // Set up data handler
-        client.on('data', (data) => {
+        client.on('data', data => {
             const response = data.toString();
             console.log('Server response:', response);
 
@@ -63,7 +63,7 @@ server.listen(0, '127.0.0.1', () => {
         process.exit(0);
     });
 
-    client.on('error', (err) => {
+    client.on('error', err => {
         console.error('Client error:', err.message);
     });
 });
