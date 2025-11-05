@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.16.1](https://github.com/nodemailer/smtp-server/compare/smtp-server-v3.16.0...smtp-server-v3.16.1) (2025-11-05)
+
+
+### Bug Fixes
+
+* relax email validation to accept Gmail forwarding addresses ([b5ea6d9](https://github.com/nodemailer/smtp-server/commit/b5ea6d91b1f795ad4ecce47623969ae83e064a63))
+
 ## [3.16.0](https://github.com/nodemailer/smtp-server/compare/smtp-server-v3.15.0...smtp-server-v3.16.0) (2025-10-29)
 
 
