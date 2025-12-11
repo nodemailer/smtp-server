@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.17.0](https://github.com/nodemailer/smtp-server/compare/v3.16.1...v3.17.0) (2025-12-11)
+
+
+### Features
+
+* add ability to customize auth required error message ([e0f3e64](https://github.com/nodemailer/smtp-server/commit/e0f3e64aa55246aa0ee42d9a6b5303fe2a802226))
+* add configurable heloResponse option for HELO/EHLO greeting ([7c8279f](https://github.com/nodemailer/smtp-server/commit/7c8279f4c2ea3d19d27efaa54d8378f12de3f986))
+* added DSN capability to feature list (disabled by default) ([#230](https://github.com/nodemailer/smtp-server/issues/230)) ([bb17377](https://github.com/nodemailer/smtp-server/commit/bb17377f47830b1d8ebb414c7c7420b1317b5e0c))
+* added support for ENHANCEDSTATUSCODES and DSN (closes [#224](https://github.com/nodemailer/smtp-server/issues/224)) ([#225](https://github.com/nodemailer/smtp-server/issues/225)) ([ad545ef](https://github.com/nodemailer/smtp-server/commit/ad545ef0904b388aa3b98d2156eac5a8e7bfeba0))
+* added support for REQUIRETLS and other body params ([71ce3aa](https://github.com/nodemailer/smtp-server/commit/71ce3aae1d0b41709913cb1fa1a89d65f949f92e))
+
+
+### Bug Fixes
+
+* 193 ([657ac6e](https://github.com/nodemailer/smtp-server/commit/657ac6e9964e5c6613be144450a8a0f61862888c))
+* added resolver option, if server closing do not permit commands (fixes [#177](https://github.com/nodemailer/smtp-server/issues/177), fixes [#181](https://github.com/nodemailer/smtp-server/issues/181)) ([#222](https://github.com/nodemailer/smtp-server/issues/222)) ([e79cac9](https://github.com/nodemailer/smtp-server/commit/e79cac9369dbca97cc47a24371151886ea60695e))
+* bug with proxy ([#218](https://github.com/nodemailer/smtp-server/issues/218)) ([9515e38](https://github.com/nodemailer/smtp-server/commit/9515e38ae0a2c03a3bbd81e3db9991cb908110d7))
+* bumped deps ([c499a3c](https://github.com/nodemailer/smtp-server/commit/c499a3c18e6df6563ac02593f8b053073de5fc84))
+* Bumped deps ([ce34da4](https://github.com/nodemailer/smtp-server/commit/ce34da43a76675689bd7a88c75ba6977d2984e21))
+* **deploy:** added autorelease ([0dbc8e1](https://github.com/nodemailer/smtp-server/commit/0dbc8e11412982395283b354c90e9ab443a7232a))
+* **deps:** Bumped deps ([e096b12](https://github.com/nodemailer/smtp-server/commit/e096b129af13a2c2d4893a8690ba06fe00fe36d2))
+* **deps:** Bumped deps ([0a2d601](https://github.com/nodemailer/smtp-server/commit/0a2d6015b69a538b2b615d172b0c5903529370f6))
+* **deps:** use punycode module ([438c617](https://github.com/nodemailer/smtp-server/commit/438c617d6ff46121fe76b90da2f1f34220ba7ae4))
+* relax email validation to accept Gmail forwarding addresses ([9e83b07](https://github.com/nodemailer/smtp-server/commit/9e83b07be336eec812bd1c6f5f1d4c4389dcb579))
+* relax email validation to accept Gmail forwarding addresses ([b5ea6d9](https://github.com/nodemailer/smtp-server/commit/b5ea6d91b1f795ad4ecce47623969ae83e064a63))
+* **release:** fixed Git URL on package.json ([5876626](https://github.com/nodemailer/smtp-server/commit/5876626aed6239ff0de4999fdf583febdda38744))
+* Replaced punycode with punycode.js ([4ccbcf2](https://github.com/nodemailer/smtp-server/commit/4ccbcf2f7d0daee0554c416be03d0eda7e2999f5))
+* strengthen email validation in _parseAddressCommand ([9aced8d](https://github.com/nodemailer/smtp-server/commit/9aced8daa1afdaf40a987ba3e560a7963b910352))
+* unref timers to allow graceful process exit ([e2542d2](https://github.com/nodemailer/smtp-server/commit/e2542d292d0ebd6ecae95c6201ab4c6aab496310))
+* update dependencies ([7f22889](https://github.com/nodemailer/smtp-server/commit/7f228899744cb9da04e2bff765dab46126b37b09))
+* **XFORWARD:** Fixed client hostname processing. Fixes [#147](https://github.com/nodemailer/smtp-server/issues/147) ([d518417](https://github.com/nodemailer/smtp-server/commit/d518417d0b9274cc45a5fde597142f79867d3eeb))
+
 ## [3.16.1](https://github.com/nodemailer/smtp-server/compare/smtp-server-v3.16.0...smtp-server-v3.16.1) (2025-11-05)
 
 
