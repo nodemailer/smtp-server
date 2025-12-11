@@ -3,7 +3,8 @@
         ".": {
             "release-type": "node",
             "package-name": "smtp-server",
-            "pull-request-title-pattern": "chore${scope}: release ${version}"
+            "pull-request-title-pattern": "chore${scope}: release ${version}",
+            "include-component-in-tag": false
         }
     }
 }
