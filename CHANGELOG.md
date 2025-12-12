@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.17.1](https://github.com/nodemailer/smtp-server/compare/v3.17.0...v3.17.1) (2025-12-12)
+
+
+### Bug Fixes
+
+* log tls protocol version and other metainfo on tls error ([#242](https://github.com/nodemailer/smtp-server/issues/242)) ([26a2e3d](https://github.com/nodemailer/smtp-server/commit/26a2e3d7915cf45912c27648b5d130b2e707654c))
+
 ## [3.17.0](https://github.com/nodemailer/smtp-server/compare/v3.16.1...v3.17.0) (2025-12-11)
 
 
