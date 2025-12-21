@@ -56,27 +56,10 @@ describe('SMTPServer', function () {
                 });
             });
 
-            it('should reject IP literal addresses by default', function () {
+            it('should parse IPv4 literal addresses', function() {
                 let conn = new SMTPConnection(
                     {
                         options: {}
-                    },
-                    {}
-                );
-
-                // IPv4 literal should be rejected by default
-                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[192.168.5.146]>')).to.be.false;
-
-                // IPv6 literal should be rejected by default
-                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:2001:db8::1]>')).to.be.false;
-            });
-
-            it('should parse IPv4 literal addresses when allowIPLiteralAddresses is enabled', function () {
-                let conn = new SMTPConnection(
-                    {
-                        options: {
-                            allowIPLiteralAddresses: true
-                        }
                     },
                     {}
                 );
@@ -100,12 +83,10 @@ describe('SMTPServer', function () {
                 });
             });
 
-            it('should parse IPv6 literal addresses when allowIPLiteralAddresses is enabled', function () {
+            it('should parse IPv6 literal addresses', function() {
                 let conn = new SMTPConnection(
                     {
-                        options: {
-                            allowIPLiteralAddresses: true
-                        }
+                        options: {}
                     },
                     {}
                 );
@@ -127,12 +108,10 @@ describe('SMTPServer', function () {
                 });
             });
 
-            it('should reject invalid IP literal addresses even when enabled', function () {
+            it('should reject invalid IP literal addresses', function () {
                 let conn = new SMTPConnection(
                     {
-                        options: {
-                            allowIPLiteralAddresses: true
-                        }
+                        options: {}
                     },
                     {}
                 );
