@@ -56,7 +56,7 @@ describe('SMTPServer', function () {
                 });
             });
 
-            it('should parse IPv4 literal addresses', function() {
+            it('should parse IPv4 literal addresses', function () {
                 let conn = new SMTPConnection(
                     {
                         options: {}
@@ -83,7 +83,7 @@ describe('SMTPServer', function () {
                 });
             });
 
-            it('should parse IPv6 literal addresses', function() {
+            it('should parse IPv6 literal addresses', function () {
                 let conn = new SMTPConnection(
                     {
                         options: {}
