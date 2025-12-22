@@ -131,6 +131,47 @@ describe('SMTPServer', function () {
                 // Random content in brackets (not a valid IP)
                 expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[notanip]>')).to.be.false;
             });
+
+            it('should normalize full form IPv6 addresses', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // Full form IPv6 should be normalized to compressed form
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:2001:0db8:0000:0000:0000:0000:0000:0001]>')).to.deep.equal({
+                    address: 'test@[IPv6:2001:db8::1]',
+                    args: false
+                });
+
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@[IPv6:0000:0000:0000:0000:0000:0000:0000:0001]>')).to.deep.equal({
+                    address: 'sender@[IPv6:::1]',
+                    args: false
+                });
+            });
+
+            it('should accept IPv4-mapped IPv6 addresses', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // IPv4-mapped IPv6 addresses are valid per RFC 4291
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:::ffff:192.168.1.1]>')).to.deep.equal({
+                    address: 'test@[IPv6:::ffff:192.168.1.1]',
+                    args: false
+                });
+
+                // IPv4-mapped in hex form
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:::ffff:c0a8:0101]>')).to.deep.equal({
+                    address: 'test@[IPv6:::ffff:c0a8:101]',
+                    args: false
+                });
+            });
         });
     });
 
