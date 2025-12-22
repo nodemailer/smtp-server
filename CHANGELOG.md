@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.18.0](https://github.com/nodemailer/smtp-server/compare/v3.17.1...v3.18.0) (2025-12-22)
+
+
+### Features
+
+* added support for `allowIPLiteralAddresses` (closes [#244](https://github.com/nodemailer/smtp-server/issues/244)) ([d7e4fa7](https://github.com/nodemailer/smtp-server/commit/d7e4fa7e3597a0416a11528b4b9ac9bd11373306))
+
+
+### Bug Fixes
+
+* fix literal format checking (closes [#244](https://github.com/nodemailer/smtp-server/issues/244)) ([8b7d426](https://github.com/nodemailer/smtp-server/commit/8b7d4262c34b0923cd81c2e58137facd8b11ae5a))
+* fix literal format checking and remove configurable option ([2361c04](https://github.com/nodemailer/smtp-server/commit/2361c04402e75cd8a5c1c2eacd5709b39cdffffc))
+
 ## [3.17.1](https://github.com/nodemailer/smtp-server/compare/v3.17.0...v3.17.1) (2025-12-12)
 
 
