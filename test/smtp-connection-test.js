@@ -55,6 +55,82 @@ describe('SMTPServer', function () {
                     }
                 });
             });
+
+            it('should parse IPv4 literal addresses', function() {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[192.168.5.146]>')).to.deep.equal({
+                    address: 'test@[192.168.5.146]',
+                    args: false
+                });
+
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@[10.0.0.1]>')).to.deep.equal({
+                    address: 'sender@[10.0.0.1]',
+                    args: false
+                });
+
+                // With additional parameters
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@[127.0.0.1]> SIZE=1234')).to.deep.equal({
+                    address: 'sender@[127.0.0.1]',
+                    args: {
+                        SIZE: '1234'
+                    }
+                });
+            });
+
+            it('should parse IPv6 literal addresses', function() {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:2001:db8::1]>')).to.deep.equal({
+                    address: 'test@[IPv6:2001:db8::1]',
+                    args: false
+                });
+
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<sender@[IPv6:::1]>')).to.deep.equal({
+                    address: 'sender@[IPv6:::1]',
+                    args: false
+                });
+
+                // Case insensitive IPv6 prefix
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[ipv6:fe80::1]>')).to.deep.equal({
+                    address: 'test@[IPv6:fe80::1]',
+                    args: false
+                });
+            });
+
+            it('should reject invalid IP literal addresses', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // Invalid IPv4 (out of range)
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[999.999.999.999]>')).to.be.false;
+
+                // Invalid IPv4 format
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[192.168.1]>')).to.be.false;
+
+                // Invalid IPv6
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[IPv6:invalid]>')).to.be.false;
+
+                // Empty brackets
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[]>')).to.be.false;
+
+                // Random content in brackets (not a valid IP)
+                expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@[notanip]>')).to.be.false;
+            });
         });
     });
 
