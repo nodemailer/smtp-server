@@ -19,6 +19,79 @@ describe('SMTPServer', function () {
     this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
 
     describe('Unit tests', function () {
+        describe('Session ID generation', function () {
+            it('should generate valid session IDs with correct format', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // ID should be 16 characters long
+                expect(conn.id).to.have.length(16);
+
+                // ID should only contain base32 characters (0-9, a-v)
+                expect(conn.id).to.match(/^[0-9a-v]+$/);
+            });
+
+            it('should generate unique session IDs', function () {
+                let ids = new Set();
+                for (let i = 0; i < 100; i++) {
+                    let conn = new SMTPConnection(
+                        {
+                            options: {}
+                        },
+                        {}
+                    );
+                    ids.add(conn.id);
+                }
+                // All 100 IDs should be unique
+                expect(ids.size).to.equal(100);
+            });
+
+            it('should use provided ID from options', function () {
+                let customId = 'mycustomsessionid';
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {},
+                    { id: customId }
+                );
+
+                expect(conn.id).to.equal(customId);
+            });
+
+            it('should set session.id to match connection id', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                expect(conn.session.id).to.equal(conn.id);
+            });
+
+            it('should handle edge case of small random values (leading zeros)', function () {
+                // Test that IDs are always 16 chars even with small random values
+                // by verifying padding works correctly
+                for (let i = 0; i < 50; i++) {
+                    let conn = new SMTPConnection(
+                        {
+                            options: {}
+                        },
+                        {}
+                    );
+                    expect(conn.id).to.have.length(16);
+                    // Verify no undefined or NaN characters
+                    expect(conn.id).to.not.include('undefined');
+                    expect(conn.id).to.not.include('NaN');
+                }
+            });
+        });
+
         describe('#_parseAddressCommand', function () {
             it('should parse MAIL FROM/RCPT TO', function () {
                 let conn = new SMTPConnection(
