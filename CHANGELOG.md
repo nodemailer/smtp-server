@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.18.3](https://github.com/nodemailer/smtp-server/compare/v3.18.2...v3.18.3) (2026-03-25)
+
+
+### Bug Fixes
+
+* limit command line length to prevent memory exhaustion ([592c566](https://github.com/nodemailer/smtp-server/commit/592c5666fa0c76d1d04c1a32abad0ef806fbfe97))
+
 ## [3.18.2](https://github.com/nodemailer/smtp-server/compare/v3.18.1...v3.18.2) (2026-03-23)
 
 
