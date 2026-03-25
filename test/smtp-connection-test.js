@@ -702,6 +702,28 @@ describe('SMTPServer', function () {
             });
         });
 
+        it('should close connection when command line is too long', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                let started = false;
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                    if (!started) {
+                        started = true;
+                        // send a large chunk with no newline to trigger maxCommandLength
+                        let longData = Buffer.alloc(5 * 1024, 0x41);
+                        socket.write(longData);
+                    }
+                });
+                socket.on('end', function () {
+                    let data = Buffer.concat(buffers).toString();
+                    expect(data).to.include('421');
+                    expect(data).to.include('Command line too long');
+                    done();
+                });
+            });
+        });
+
         it('should reject early talker', function (done) {
             let socket = net.connect(PORT, '127.0.0.1', function () {
                 let buffers = [];
