@@ -12,7 +12,7 @@
     "license": "MIT-0",
     "dependencies": {
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "8.0.3",
+        "nodemailer": "8.0.4",
         "punycode.js": "2.3.1"
     },
     "devDependencies": {
