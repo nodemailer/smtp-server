@@ -1616,6 +1616,118 @@ describe('SMTPServer', function () {
                 socket.write('PROXY TCP4 1.2.3.4 203.0.113.7 35646 80\r\n');
             });
         });
+
+        it('should deliver "* BAD" diagnostic before closing on invalid PROXY header', function (done) {
+            // A garbage (non-PROXY) header must still receive the diagnostic
+            // line: the socket is closed via end() and must not be destroy()ed
+            // before that buffered line is flushed to the client.
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                });
+                socket.on('end', function () {
+                    let data = Buffer.concat(buffers).toString();
+                    expect(data.indexOf('* BAD Invalid PROXY header')).to.equal(0);
+                    done();
+                });
+                socket.write('NOTPROXY garbage line\r\n');
+            });
+            socket.on('error', function () {});
+        });
+
+        it('should not crash when client RSTs before sending PROXY header', function (done) {
+            // Regression test: previously the socket inside _handleProxy had
+            // no 'error' listener, so a client that reset the connection
+            // before the PROXY header arrived bubbled up as an
+            // uncaughtException and tore down the process.
+            //
+            // The deterministic signal is _handleProxy invoking its callback
+            // with an error: that means the server saw the broken socket and
+            // routed it through the error path instead of crashing.
+            let prevHandleProxy = server._handleProxy;
+
+            let onUncaught;
+            let onServerError;
+
+            function cleanup() {
+                process.removeListener('uncaughtException', onUncaught);
+                server.removeListener('error', onServerError);
+                server._handleProxy = prevHandleProxy;
+            }
+
+            onUncaught = function (err) {
+                cleanup();
+                done(new Error('uncaughtException leaked from _handleProxy: ' + err.message));
+            };
+
+            onServerError = function (err) {
+                cleanup();
+                done(new Error('server emitted error: ' + err.message));
+            };
+
+            process.once('uncaughtException', onUncaught);
+            server.on('error', onServerError);
+
+            server._handleProxy = function (sock, cb) {
+                return prevHandleProxy.call(this, sock, function (err, opts) {
+                    if (err) {
+                        cleanup();
+                        done();
+                        return;
+                    }
+                    return cb(err, opts);
+                });
+            };
+
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                // partial header, then force a RST instead of a clean FIN
+                socket.write('PROXY TCP4 1.2.3.4');
+                if (typeof socket.resetAndDestroy === 'function') {
+                    socket.resetAndDestroy();
+                } else {
+                    socket.destroy(new Error('boom'));
+                }
+            });
+            socket.on('error', function () {
+                // expected on the client side
+            });
+        });
+
+        it('should not invoke onConnect when client closes before PROXY header', function (done) {
+            // If the socket FINs before we ever see a newline-terminated PROXY
+            // header, the connection should be aborted silently — onConnect
+            // must not fire, and the process must not crash.
+            let connectFired = false;
+            let prevOnConnect = server.options.onConnect;
+            server.options.onConnect = function (session, cb) {
+                connectFired = true;
+                cb();
+            };
+
+            // _handleProxy invoking its callback with an error is the
+            // deterministic signal: the error and the (erroneous) connect path
+            // are mutually exclusive branches of that same callback, so once we
+            // see the error we know connect was not taken — no timer needed.
+            let prevHandleProxy = server._handleProxy;
+            server._handleProxy = function (sock, cb) {
+                return prevHandleProxy.call(this, sock, function (err, opts) {
+                    if (err) {
+                        server.options.onConnect = prevOnConnect;
+                        server._handleProxy = prevHandleProxy;
+                        expect(connectFired).to.equal(false);
+                        done();
+                        return;
+                    }
+                    return cb(err, opts);
+                });
+            };
+
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                socket.end(); // graceful close, no PROXY header sent
+            });
+            socket.on('error', function () {});
+        });
     });
 
     describe('Secure PROXY server', function () {
