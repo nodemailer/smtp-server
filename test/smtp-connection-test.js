@@ -309,6 +309,65 @@ describe('SMTPServer', function () {
                     args: false
                 });
             });
+
+            it('should reject control and invisible characters in addresses even in lenient mode', function () {
+                let strictConn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+                let lenientConn = new SMTPConnection(
+                    {
+                        options: {
+                            lenientAddressParsing: true
+                        }
+                    },
+                    {}
+                );
+
+                for (let conn of [strictConn, lenientConn]) {
+                    // NUL byte in local part
+                    expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<te\x00st@example.com>')).to.be.false;
+
+                    // escape and DEL characters in local part
+                    expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<te\x1bst@example.com>')).to.be.false;
+                    expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<te\x7fst@example.com>')).to.be.false;
+
+                    // C1 control character in local part
+                    expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<te\u0085st@example.com>')).to.be.false;
+
+                    // zero-width space and word joiner in domain
+                    expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@exam\u200Bple.com>')).to.be.false;
+                    expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@exam\u2060ple.com>')).to.be.false;
+
+                    // zero-width no-break space in domain
+                    expect(conn._parseAddressCommand('RCPT TO', 'RCPT TO:<test@exam\uFEFFple.com>')).to.be.false;
+                }
+            });
+
+            it('should reject parameter values with control characters', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // raw NUL byte in parameter value
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com> ENVID=ab\x00cd')).to.be.false;
+
+                // CRLF smuggled through xtext encoding
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com> ENVID=ab+0D+0Acd')).to.be.false;
+
+                // properly encoded printable characters are still decoded
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com> ENVID=ab+2Bcd')).to.deep.equal({
+                    address: 'test@example.com',
+                    args: {
+                        ENVID: 'ab+cd'
+                    }
+                });
+            });
         });
     });
 
@@ -1521,6 +1580,52 @@ describe('SMTPServer', function () {
                     );
                 }
             );
+        });
+    });
+
+    describe('STARTTLS syntax', function () {
+        it('should reject STARTTLS command with parameters', function (done) {
+            let server = new SMTPServer({
+                logger: false
+            });
+
+            server.listen(0, '127.0.0.1', function () {
+                let PORT = server.server.address().port;
+                let socket = net.connect(PORT, '127.0.0.1', function () {
+                    let buffers = [];
+                    let sentEhlo = false;
+                    let sentStarttls = false;
+                    let sentQuit = false;
+
+                    socket.on('data', function (chunk) {
+                        buffers.push(chunk);
+                        let data = Buffer.concat(buffers).toString();
+
+                        if (!sentEhlo && /^220 /m.test(data)) {
+                            sentEhlo = true;
+                            return socket.write('EHLO example.com\r\n');
+                        }
+
+                        if (!sentStarttls && /^250 /m.test(data)) {
+                            sentStarttls = true;
+                            return socket.write('STARTTLS FOO\r\n');
+                        }
+
+                        if (!sentQuit && /^501 /m.test(data)) {
+                            sentQuit = true;
+                            return socket.write('QUIT\r\n');
+                        }
+                    });
+
+                    socket.on('end', function () {
+                        let data = Buffer.concat(buffers).toString();
+                        expect(data).to.include('501 Error: syntax: STARTTLS');
+                        // connection must remain usable in plaintext mode after the rejection
+                        expect(data).to.include('221 Bye');
+                        server.close(done);
+                    });
+                });
+            });
         });
     });
 
