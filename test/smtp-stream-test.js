@@ -57,4 +57,46 @@ describe('SMTPStream', function () {
 
         stream.end('DATA\r\ntest1\r\n..test2\r\n.test3\r\n.\r\nQUIT');
     });
+
+    it('should set sizeExceeded in real time while receiving data', function (done) {
+        let stream = new SMTPStream();
+
+        stream.oncommand = function (cmd, cb) {
+            cmd = cmd.toString();
+
+            let datastream;
+            if (cmd === 'DATA') {
+                datastream = stream.startDataMode(1024); // 1kB limit
+
+                expect(datastream.sizeExceeded).to.equal(false);
+                expect(datastream.byteLength).to.equal(0);
+
+                let exceededDuringTransfer = false;
+                datastream.on('data', function () {
+                    if (datastream.sizeExceeded) {
+                        exceededDuringTransfer = true;
+                    }
+                });
+                datastream.on('end', function () {
+                    expect(exceededDuringTransfer).to.equal(true);
+                    expect(datastream.sizeExceeded).to.equal(true);
+                    expect(datastream.byteLength).to.be.gt(1024);
+                    stream.continue();
+                });
+            }
+
+            if (cb) {
+                return cb();
+            } else {
+                return done();
+            }
+        };
+
+        stream.write('DATA\r\n');
+        // exceed the 1kB limit several times over in separate chunks
+        for (let i = 0; i < 8; i++) {
+            stream.write(Buffer.alloc(1024, 0x62)); // 1kB of "b"
+        }
+        stream.end('\r\n.\r\nQUIT');
+    });
 });
