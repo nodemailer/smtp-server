@@ -1342,6 +1342,111 @@ describe('SMTPServer', function () {
         });
     });
 
+    describe('SASL identity handling', function () {
+        let PORT;
+        let server;
+        let lastAuth;
+
+        beforeEach(function (done) {
+            lastAuth = false;
+            server = new SMTPServer({
+                maxClients: 5,
+                logger: false,
+                authMethods: ['PLAIN', 'LOGIN'],
+                allowInsecureAuth: true,
+                onAuth(auth, session, callback) {
+                    lastAuth = auth;
+                    if (auth.username === 'testuser' && auth.password === 'testpass') {
+                        return callback(null, {
+                            user: 'userdata'
+                        });
+                    }
+                    return callback(null, {
+                        message: 'Authentication failed'
+                    });
+                }
+            });
+            server.listen(0, '127.0.0.1', err => {
+                if (err) return done(err);
+                PORT = server.server.address().port;
+                done();
+            });
+        });
+
+        afterEach(function (done) {
+            server.close(done);
+        });
+
+        // connects, sends EHLO and then one command after every final response,
+        // ending with QUIT. Calls onClose with all collected response data
+        function exchange(commands, onClose) {
+            commands = ['EHLO example.com'].concat(commands).concat('QUIT');
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                let sent = 0;
+
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                    let data = Buffer.concat(buffers).toString();
+                    // count final response lines (status code not followed by a dash)
+                    let finals = (data.match(/^\d{3}(?!-)/gm) || []).length;
+                    while (sent < commands.length && finals > sent) {
+                        socket.write(commands[sent++] + '\r\n');
+                    }
+                });
+
+                socket.on('end', function () {
+                    onClose(Buffer.concat(buffers).toString());
+                });
+            });
+        }
+
+        it('should fall back to authzid when authcid is empty', function (done) {
+            // some clients place the username in the authzid field, eg. testuser\x00\x00testpass
+            let token = Buffer.from('testuser\x00\x00testpass').toString('base64');
+            exchange(['AUTH PLAIN ' + token], function (data) {
+                expect(data).to.include('235 Authentication successful');
+                expect(lastAuth.method).to.equal('PLAIN');
+                expect(lastAuth.username).to.equal('testuser');
+                expect(lastAuth.authcid).to.equal('');
+                expect(lastAuth.authzid).to.equal('testuser');
+                done();
+            });
+        });
+
+        it('should expose authzid and authcid for PLAIN', function (done) {
+            let token = Buffer.from('admin\x00testuser\x00testpass').toString('base64');
+            exchange(['AUTH PLAIN ' + token], function (data) {
+                expect(data).to.include('235 Authentication successful');
+                expect(lastAuth.method).to.equal('PLAIN');
+                expect(lastAuth.username).to.equal('testuser');
+                expect(lastAuth.authcid).to.equal('testuser');
+                expect(lastAuth.authzid).to.equal('admin');
+                done();
+            });
+        });
+
+        it('should reject PLAIN token with control characters in username', function (done) {
+            // CRLF injection attempt through the authzid field
+            let token = Buffer.from('attacker\r\nReceived: evil\x00\x00p').toString('base64');
+            exchange(['AUTH PLAIN ' + token], function (data) {
+                expect(data).to.include('500 Error: invalid userdata');
+                // onAuth must never see the poisoned username
+                expect(lastAuth).to.equal(false);
+                done();
+            });
+        });
+
+        it('should reject LOGIN username with control characters', function (done) {
+            let username = Buffer.from('attacker\r\nReceived: evil').toString('base64');
+            exchange(['AUTH LOGIN', username], function (data) {
+                expect(data).to.include('500 Error: invalid userdata');
+                expect(lastAuth).to.equal(false);
+                done();
+            });
+        });
+    });
+
     describe('Mail tests', function () {
         let PORT;
 
