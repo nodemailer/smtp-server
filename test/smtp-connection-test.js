@@ -1993,6 +1993,41 @@ describe('SMTPServer', function () {
             socket.on('error', function () {});
         });
 
+        it('should reject PROXY header without newline once it exceeds the length cap', function (done) {
+            // A peer that withholds the terminating newline must not cause
+            // unbounded buffering: the server caps the PROXY header at 1kB
+            // and drops the connection with the diagnostic line.
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                });
+                socket.on('close', function () {
+                    let data = Buffer.concat(buffers).toString();
+                    expect(data.indexOf('* BAD Invalid PROXY header')).to.equal(0);
+                    done();
+                });
+                socket.write(Buffer.alloc(1500, 0x41)); // 1500 bytes of "A", no newline
+            });
+            socket.on('error', function () {});
+        });
+
+        it('should reject overlong PROXY header line even when newline-terminated', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                });
+                socket.on('close', function () {
+                    let data = Buffer.concat(buffers).toString();
+                    expect(data.indexOf('* BAD Invalid PROXY header')).to.equal(0);
+                    done();
+                });
+                socket.write('PROXY TCP4 ' + 'A'.repeat(2048) + '\r\n');
+            });
+            socket.on('error', function () {});
+        });
+
         it('should not crash when client RSTs before sending PROXY header', function (done) {
             // Regression test: previously the socket inside _handleProxy had
             // no 'error' listener, so a client that reset the connection
