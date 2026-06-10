@@ -245,6 +245,70 @@ describe('SMTPServer', function () {
                     args: false
                 });
             });
+
+            it('should reject malformed addresses by default', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {}
+                    },
+                    {}
+                );
+
+                // local part with trailing dot (eg. HPE iLO firmware)
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<ilo.@example.com>')).to.be.false;
+
+                // leading dot and consecutive dots in local part
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<.test@example.com>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<te..st@example.com>')).to.be.false;
+
+                // malformed domain
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example..com>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@example.com.>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@.example.com>')).to.be.false;
+            });
+
+            it('should accept malformed addresses in lenient mode', function () {
+                let conn = new SMTPConnection(
+                    {
+                        options: {
+                            lenientAddressParsing: true
+                        }
+                    },
+                    {}
+                );
+
+                // local part with trailing dot (eg. HPE iLO firmware)
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<ilo.@example.com>')).to.deep.equal({
+                    address: 'ilo.@example.com',
+                    args: false
+                });
+
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<.te..st.@example..com.> SIZE=12345')).to.deep.equal({
+                    address: '.te..st.@example..com.',
+                    args: {
+                        SIZE: '12345'
+                    }
+                });
+
+                // length limits are not enforced
+                let longLocal = 'a'.repeat(300);
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<' + longLocal + '@example.com>')).to.deep.equal({
+                    address: longLocal + '@example.com',
+                    args: false
+                });
+
+                // basic structure is still required
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<@example.com>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<test@>')).to.be.false;
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:test@example.com')).to.be.false;
+
+                // empty address (null return path) is still allowed
+                expect(conn._parseAddressCommand('MAIL FROM', 'MAIL FROM:<>')).to.deep.equal({
+                    address: '',
+                    args: false
+                });
+            });
         });
     });
 
@@ -1457,6 +1521,89 @@ describe('SMTPServer', function () {
                     );
                 }
             );
+        });
+    });
+
+    describe('Lenient address parsing', function () {
+        it('should reject a non-compliant sender address by default', function (done) {
+            let PORT = 1336;
+
+            let connection;
+
+            let server = new SMTPServer({
+                logger: false,
+                disabledCommands: ['AUTH', 'STARTTLS']
+            });
+
+            server.listen(PORT, '127.0.0.1', function () {
+                connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1'
+                });
+
+                connection.on('end', function () {
+                    server.close(done);
+                });
+
+                connection.connect(function () {
+                    connection.send(
+                        {
+                            from: 'ilo.@example.com',
+                            to: ['recipient@example.com']
+                        },
+                        'testmessage',
+                        function (err) {
+                            expect(err).to.exist;
+                            expect(err.responseCode).to.equal(501);
+                            connection.quit();
+                        }
+                    );
+                });
+            });
+        });
+
+        it('should accept a non-compliant sender address in lenient mode', function (done) {
+            let PORT = 1336;
+
+            let connection;
+
+            let server = new SMTPServer({
+                logger: false,
+                lenientAddressParsing: true,
+                disabledCommands: ['AUTH', 'STARTTLS']
+            });
+
+            server.onMailFrom = function (address, session, callback) {
+                expect(address.address).to.equal('ilo.@example.com');
+                callback();
+            };
+
+            server.listen(PORT, '127.0.0.1', function () {
+                connection = new Client({
+                    port: PORT,
+                    host: '127.0.0.1'
+                });
+
+                connection.on('end', function () {
+                    server.close(done);
+                });
+
+                connection.connect(function () {
+                    connection.send(
+                        {
+                            from: 'ilo.@example.com',
+                            to: ['recipient@example.com']
+                        },
+                        'testmessage',
+                        function (err, status) {
+                            expect(err).to.not.exist;
+                            expect(status.accepted.length).to.equal(1);
+                            expect(status.rejected.length).to.equal(0);
+                            connection.quit();
+                        }
+                    );
+                });
+            });
         });
     });
 
