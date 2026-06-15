@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.19.0](https://github.com/nodemailer/smtp-server/compare/v3.18.5...v3.19.0) (2026-06-15)
+
+
+### Features
+
+* add lenientAddressParsing option to relax strict address validation ([2237bb4](https://github.com/nodemailer/smtp-server/commit/2237bb49d0b73bc03c11313c0bff96f438b73049)), closes [#259](https://github.com/nodemailer/smtp-server/issues/259)
+* update stream.sizeExceeded and byteLength in real time ([9051734](https://github.com/nodemailer/smtp-server/commit/905173497a797e2d84bcc1805301ac82dc0c727b))
+
+
+### Bug Fixes
+
+* cap PROXY header length to prevent unbounded buffering ([38a3190](https://github.com/nodemailer/smtp-server/commit/38a31900716023e4d509bab8db50f656ed1a2459))
+* expose SASL PLAIN authzid and reject control characters in usernames ([4107568](https://github.com/nodemailer/smtp-server/commit/4107568efbbebb3a53b913712cdc771aa3f3967f)), closes [#261](https://github.com/nodemailer/smtp-server/issues/261)
+* handle half-open socket close while reading PROXY header ([cdaefd8](https://github.com/nodemailer/smtp-server/commit/cdaefd80cb49c89fb0f42729ceba988c387c71e0))
+* prevent uncaughtException when client disconnects before PROXY header ([e240a50](https://github.com/nodemailer/smtp-server/commit/e240a5090e0fc1b19dc2ce12d7f62cd993cb4cdf))
+* reject STARTTLS parameters and control characters in envelope input ([db1f3d4](https://github.com/nodemailer/smtp-server/commit/db1f3d41a26b92f956565ee993d5df6ca84dd84e)), closes [#260](https://github.com/nodemailer/smtp-server/issues/260)
+* use crypto.randomBytes for CRAM-MD5 challenge ([4dbc916](https://github.com/nodemailer/smtp-server/commit/4dbc91696b7921b8d1e4b3998167c11314b9b98a))
+
 ## [3.18.5](https://github.com/nodemailer/smtp-server/compare/v3.18.4...v3.18.5) (2026-05-29)
 
 
