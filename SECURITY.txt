@@ -1,22 +1,27 @@
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA256
 
+Contact: https://github.com/nodemailer/smtp-server/security/advisories/new
 Contact: mailto:andris@reinman.eu
+Expires: 2027-06-01T00:00:00.000Z
 Encryption: https://keys.openpgp.org/vks/v1/by-fingerprint/5D952A46E1D8C931F6364E01DC6C83F4D584D364
 Preferred-Languages: en, et
+Canonical: https://github.com/nodemailer/smtp-server/blob/master/SECURITY.txt
+Policy: https://github.com/nodemailer/smtp-server/blob/master/SECURITY.md
 -----BEGIN PGP SIGNATURE-----
 
-iQIzBAEBCAAdFiEEXZUqRuHYyTH2Nk4B3GyD9NWE02QFAmFDnUgACgkQ3GyD9NWE
-02RqUA/+MM3afmRYq874C7wp+uN6dTMCvUX5g5zqBZ2yKpFr46L+PYvM7o8TMm5h
-hmLT2I1zZmi+xezOL3zHFizaw0tKkZIz9cWl3Jrgs0FLp0zOsSz1xucp9Q2tYM/Q
-vbiP6ys0gbim4tkDGRmZOEiO23s0BuRnmHt7vZg210O+D105Yd8/Ohzbj6PSLBO5
-W1tA7Xw5t0FQ14NNH5+MKyDIKoCX12n0FmrC6qLTXeojf291UgKhCUPda3LIGTmx
-mTXz0y68149Mw+JikRCYP8HfGRY9eA4XZrYXF7Bl2T9OJpKD3JAH+69P3xBw19Gn
-Csaw3twu8P1bxoVGjY4KRrBOp68W8TwZYjWVWbqY6oV8hb/JfrMxa+kaSxRuloFs
-oL6+phrDSPTWdOj2LlEDBJbPOMeDFzIlsBBcJ/JHCEHTvlHl7LoWr3YuWce9PUwl
-4r3JUovvaeuJxLgC0vu3WCB3Jeocsl3SreqNkrVc1IjvkSomn3YGm5nCNAd/2F0V
-exCGRk/8wbkSjAY38GwQ8K/VuFsefWN3L9sVwIMAMu88KFCAN+GzVFiwvyIXehF5
-eogP9mIXzdQ5YReQjUjApOzGz54XnDyv9RJ3sdvMHosLP+IOg+0q5t9agWv6aqSR
-2HzCpiQnH/gmM5NS0AU4Koq/L7IBeLu1B8+61/+BiHgZJJmPdgU=
-=BUZr
+iQJPBAEBCAA5FiEEXZUqRuHYyTH2Nk4B3GyD9NWE02QFAmowLgMbFIAAAAAABAAO
+bWFudTIsMi41KzEuMTIsMCwzAAoJENxsg/TVhNNkiLwQAJfUlfkwf7OWjleFX6/W
+kEr8vfVdJOt0ASmWEIKH1oaEtTxacWS2tekNqKdOLwvXs6+tlHxK+ntFa1gDUbKq
+cZNfI1TzsDLUf13Xatf9VeHoc6Ywiyr6mS9+BxsFeBXYYpsjmo+YM9sg5DFdQ7C4
+tT5VImCp9gte+C7mmtGS7fRfz0OJ1tK3Temf8pVqoCVRJfiCesxV6RKU0k7KyTp2
+hdKdz9alSXeNYkjTG5uOeMBlZW0MFFI4c2tqovccKrzhz1YCxQH0n/lrJzEqoV9V
+9C98suli7Ta0i6ljFCMB4Y3nnuS8iCEpVAaytibzNfGJwNNqxBLfX3PvbLh+rK/+
+5NiVazreMV/rBsR/gH3oHpes7iBb08LwWkaP7B+aixxBoO6ptmLJnrkExYs1Rh/i
+j8jFOl7D/p97u2iZJT5w3+XcjtERgeLjytxUCmaM1eBMzlGEn0e/spt9dMvK8vAx
+0kjwh5x+9bpoDEq1UNylTkTOex39yGjGoghB3XUfpGJYvb7HGlbG+ffAJFIyqbz7
+QtOlYv+/5T9oInu0bV1Y1zCYhCMQ8NqkDKBHXQbII5tX57/83YaAIf6DHVyXg/lP
+3EsKHXJ8zco9XqDp/pofuL6gQ/7jHD5DL/D0bEE7exPAJ9WjfAzOzF5UX4Hb1IKX
+KFsm1BD5QcltO1MkLECP2IZx
+=mdYQ
 -----END PGP SIGNATURE-----
