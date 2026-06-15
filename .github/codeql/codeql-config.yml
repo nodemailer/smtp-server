@@ -1,0 +1,11 @@
+name: "smtp-server CodeQL config"
+
+# Exclude code that is not part of the production runtime from analysis.
+# These paths generate only false-positive noise:
+#   - tests intentionally exercise edge cases, disable TLS verification, and
+#     build messages from fixed fixtures
+#   - example scripts are documentation, not shipped library code
+paths-ignore:
+    - test
+    - '**/test/**'
+    - examples
