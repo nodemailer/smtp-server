@@ -8,12 +8,59 @@ const XOAuth2 = require('nodemailer/lib/xoauth2');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
 const SMTPConnection = require('../lib/smtp-connection').SMTPConnection;
 const net = require('net');
+const tls = require('tls');
 const pem = require('pem');
 
 const expect = chai.expect;
 const fs = require('fs');
 
 chai.config.includeStack = true;
+
+// a response block is complete once it ends with a final (non-continuation) line
+const FINAL_RESPONSE = /^\d{3} .*\r\n$/m;
+
+/**
+ * Drives an SMTP conversation on an open socket: writes the next command after
+ * every final response line, then calls back with the final line of each response
+ * block and with everything the server sent.
+ *
+ * @param {Socket} socket Connected socket, plaintext or TLS
+ * @param {String[]} commands Commands to send, each including its own CRLF
+ * @param {Boolean} expectGreeting False inside a TLS session, where the server
+ *     never speaks first and the client has to send the opening command
+ * @param {Function} callback Called as (err, responseLines, fullText)
+ */
+function driveSocket(socket, commands, expectGreeting, callback) {
+    let data = '';
+    let sent = 0;
+    let lines = [];
+    let full = '';
+
+    let onData = chunk => {
+        data += chunk.toString();
+        if (!FINAL_RESPONSE.test(data)) {
+            // still waiting for the end of this response block
+            return;
+        }
+
+        full += data;
+        lines.push(data.trim().split(/\r\n/).pop());
+        data = '';
+
+        if (sent < commands.length) {
+            return socket.write(commands[sent++]);
+        }
+
+        socket.removeListener('data', onData);
+        return callback(null, lines, full);
+    };
+
+    socket.on('data', onData);
+
+    if (!expectGreeting && commands.length) {
+        socket.write(commands[sent++]);
+    }
+}
 
 describe('SMTPServer', function () {
     this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
@@ -1734,6 +1781,538 @@ describe('SMTPServer', function () {
         });
     });
 
+    describe('STARTTLS', function () {
+        let server;
+        let PORT;
+        let sockets;
+
+        beforeEach(function (done) {
+            sockets = [];
+            server = new SMTPServer({
+                logger: false,
+                allowInsecureAuth: true,
+                onAuth(auth, session, callback) {
+                    callback(null, { user: auth.username });
+                },
+                onMailFrom(address, session, callback) {
+                    callback();
+                }
+            });
+            server.listen(0, '127.0.0.1', err => {
+                if (err) {
+                    return done(err);
+                }
+                PORT = server.server.address().port;
+                done();
+            });
+        });
+
+        afterEach(function (done) {
+            sockets.forEach(socket => socket.destroy());
+            server.close(done);
+        });
+
+        // Runs the plaintext commands, then performs the TLS handshake once the
+        // server is ready for it and runs the remaining commands inside the tunnel.
+        // Calls back with everything the server sent inside the TLS session.
+        //
+        // Commands are written verbatim, so a test can pipeline additional data
+        // after STARTTLS by including it in that command string
+        function starttls(plaintextCommands, secureCommands, callback) {
+            let socket = net.connect(PORT, '127.0.0.1');
+            sockets.push(socket);
+            socket.on('error', callback);
+
+            // driveSocket detaches its own listener once the last plaintext command
+            // has been answered, so it can not eat any of the handshake bytes
+            driveSocket(socket, plaintextCommands, true, err => {
+                if (err) {
+                    return callback(err);
+                }
+
+                let secureSocket = tls.connect({ socket, rejectUnauthorized: false }, () => driveSocket(secureSocket, secureCommands, false, callback));
+
+                secureSocket.on('error', callback);
+                sockets.push(secureSocket);
+            });
+        }
+
+        it('should discard the pre-TLS EHLO and mail transaction', function (done) {
+            starttls(
+                ['EHLO example.com\r\n', 'MAIL FROM:<sender@example.com>\r\n', 'STARTTLS\r\n'],
+                // continue the plaintext transaction without a new EHLO
+                ['RCPT TO:<rcpt@example.com>\r\n', 'QUIT\r\n'],
+                function (err, lines, data) {
+                    if (err) {
+                        return done(err);
+                    }
+                    expect(data).to.include('503 Error: send HELO/EHLO first');
+                    done();
+                }
+            );
+        });
+
+        it('should discard an identity authenticated in plaintext', function (done) {
+            let sessions = [];
+            server.onMailFrom = (address, session, callback) => {
+                sessions.push(session);
+                callback();
+            };
+
+            starttls(
+                ['EHLO example.com\r\n', 'AUTH PLAIN ' + Buffer.from(' insecure pass').toString('base64') + '\r\n', 'STARTTLS\r\n'],
+                ['EHLO example.com\r\n', 'MAIL FROM:<sender@example.com>\r\n', 'QUIT\r\n'],
+                function (err, lines, data) {
+                    if (err) {
+                        return done(err);
+                    }
+                    // the plaintext identity must not carry over into the TLS session
+                    expect(data).to.include('530 Error: authentication Required');
+                    // and the client must be able to authenticate again
+                    expect(data).to.include('AUTH ');
+                    expect(sessions).to.deep.equal([]);
+                    done();
+                }
+            );
+        });
+
+        it('should not execute plaintext commands pipelined after STARTTLS', function (done) {
+            starttls(
+                // a complete line and a trailing partial line, the partial one used to
+                // survive in the parser remainder and get spliced onto the first
+                // command received inside the TLS session
+                ['EHLO example.com\r\n', 'STARTTLS\r\nNOOP\r\nQUIT '],
+                ['NOOP\r\n', 'QUIT\r\n'],
+                function (err, lines, data) {
+                    if (err) {
+                        return done(err);
+                    }
+                    // "QUIT NOOP" would answer 221, the pipelined NOOP an extra 250 OK
+                    expect(data.match(/^250 OK/gm)).to.have.lengthOf(1);
+                    expect(data.indexOf('221')).to.be.gt(data.indexOf('250 OK'));
+                    done();
+                }
+            );
+        });
+
+        it('should not answer plaintext pipelined after STARTTLS on the raw socket', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1');
+            sockets.push(socket);
+            socket.on('error', done);
+
+            let data = '';
+            let sent = 0;
+
+            socket.on('data', function (chunk) {
+                data += chunk.toString();
+
+                if (sent === 0 && /^220 /m.test(data)) {
+                    sent = 1;
+                    data = '';
+                    return socket.write('EHLO example.com\r\n');
+                }
+
+                if (sent === 1 && /^250 /m.test(data)) {
+                    sent = 2;
+                    data = '';
+                    // a payload that every branch of _onCommand above the upgrade
+                    // check would answer with a plaintext 421 and then close
+                    return socket.write('STARTTLS\r\nGET / HTTP/1.0\r\n');
+                }
+
+                if (sent === 2 && /220 Ready to start TLS\r\n/.test(data)) {
+                    sent = 3;
+                    return setTimeout(function () {
+                        // nothing may be written to the raw socket once the
+                        // handshake has been announced
+                        expect(data).to.equal('220 Ready to start TLS\r\n');
+                        expect(socket.destroyed).to.equal(false);
+                        done();
+                    }, 100);
+                }
+            });
+        });
+
+        it('should not write a socket timeout response onto the raw socket', function (done) {
+            // the timeout fires from upgrade()'s own setTimeout, so it is not gated by
+            // the check in _onCommand and has to be suppressed by send() itself
+            let timeoutServer = new SMTPServer({ logger: false, authOptional: true, socketTimeout: 500 });
+
+            timeoutServer.listen(0, '127.0.0.1', function (err) {
+                if (err) {
+                    return done(err);
+                }
+
+                let socket = net.connect(timeoutServer.server.address().port, '127.0.0.1');
+                sockets.push(socket);
+                socket.on('error', () => false); // the server drops the connection on timeout
+
+                let data = '';
+                let afterUpgrade = '';
+                let sent = 0;
+
+                socket.on('data', function (chunk) {
+                    if (sent === 3) {
+                        afterUpgrade += chunk.toString();
+                        return;
+                    }
+
+                    data += chunk.toString();
+
+                    if (sent === 0 && /^220 /m.test(data)) {
+                        sent = 1;
+                        data = '';
+                        return socket.write('EHLO example.com\r\n');
+                    }
+
+                    if (sent === 1 && /^250 /m.test(data)) {
+                        sent = 2;
+                        data = '';
+                        return socket.write('STARTTLS\r\n');
+                    }
+
+                    if (sent === 2 && /220 Ready to start TLS\r\n/.test(data)) {
+                        sent = 3;
+                        // begin a handshake and stall, leaving a partial TLS record
+                        socket.write(Buffer.from([0x16, 0x03, 0x01, 0x00, 0x50, 0x01]));
+
+                        return setTimeout(function () {
+                            // NB! close before asserting, so that a failure reports the
+                            // assertion instead of hanging the suite on a live server
+                            timeoutServer.close(function () {
+                                expect(afterUpgrade).to.equal('');
+                                done();
+                            });
+                        }, 1200);
+                    }
+                });
+            });
+        });
+
+        it('should not reset the session when the client renegotiates', function (done) {
+            let socket = net.connect(PORT, '127.0.0.1');
+            sockets.push(socket);
+            socket.on('error', done);
+
+            driveSocket(socket, ['EHLO example.com\r\n', 'STARTTLS\r\n'], true, function (err) {
+                if (err) {
+                    return done(err);
+                }
+
+                // renegotiation only exists up to TLS 1.2
+                let secureSocket = tls.connect({ socket, rejectUnauthorized: false, minVersion: 'TLSv1.2', maxVersion: 'TLSv1.2' }, function () {
+                    driveSocket(secureSocket, ['EHLO example.com\r\n'], false, function (err) {
+                        if (err) {
+                            return done(err);
+                        }
+
+                        secureSocket.renegotiate({ rejectUnauthorized: false }, function (err) {
+                            if (err) {
+                                // the platform refused to renegotiate, nothing to assert
+                                return done();
+                            }
+
+                            driveSocket(secureSocket, ['NOOP\r\n', 'MAIL FROM:<sender@example.com>\r\n'], false, function (err, lines, data) {
+                                if (err) {
+                                    return done(err);
+                                }
+                                // a second 'secure' event used to re-pipe the socket into
+                                // the parser, answering every later command twice
+                                expect(data.match(/^250 OK/gm)).to.have.lengthOf(1);
+                                // and it used to wipe the EHLO identity mid-session. MAIL
+                                // FROM is refused for lack of auth on this server, so a
+                                // 530 rather than a 503 shows the identity survived
+                                expect(data).to.not.include('503 Error: send HELO/EHLO first');
+                                expect(data).to.include('530 Error: authentication Required');
+                                done();
+                            });
+                        });
+                    });
+                });
+
+                secureSocket.on('error', done);
+                sockets.push(secureSocket);
+            });
+        });
+    });
+
+    describe('XCLIENT parameter validation', function () {
+        let server;
+        let PORT;
+        let sockets;
+        let sessions;
+
+        beforeEach(function (done) {
+            sockets = [];
+            sessions = [];
+            server = new SMTPServer({
+                logger: false,
+                useXClient: true,
+                authOptional: true,
+                onMailFrom(address, session, callback) {
+                    sessions.push(session);
+                    callback();
+                }
+            });
+            server.listen(0, '127.0.0.1', err => {
+                if (err) {
+                    return done(err);
+                }
+                PORT = server.server.address().port;
+                done();
+            });
+        });
+
+        afterEach(function (done) {
+            sockets.forEach(socket => socket.destroy());
+            server.close(done);
+        });
+
+        // connects and runs the commands, calling back with the final line of each
+        // response. Index 0 is the greeting, so command N is answered by index N+1
+        function exchange(commands, callback) {
+            let socket = net.connect(PORT, '127.0.0.1');
+            sockets.push(socket);
+            socket.on('error', callback);
+
+            driveSocket(
+                socket,
+                commands.map(command => command + '\r\n'),
+                true,
+                callback
+            );
+        }
+
+        it('should reject xtext values with control characters', function (done) {
+            // +0D+0A decodes to CR LF after xtext decoding
+            exchange(['XCLIENT NAME=evil+0D+0Ainjected ADDR=127.0.0.1', 'EHLO example.com', 'MAIL FROM:<sender@example.com>'], function (err, responses) {
+                if (err) {
+                    return done(err);
+                }
+                // the greeting is the first response, XCLIENT the second
+                expect(responses[1]).to.equal('501 Error: Bad command parameter syntax');
+                expect(sessions).to.have.lengthOf(1);
+                expect(sessions[0].clientHostname).to.not.include('injected');
+                expect(sessions[0].xClient.has('NAME')).to.be.false;
+                done();
+            });
+        });
+
+        it('should not apply any parameter of a rejected command', function (done) {
+            exchange(
+                [
+                    // ADDR is valid and would be applied before NAME is rejected
+                    'XCLIENT ADDR=6.6.6.6 NAME=evil+0Dinjected',
+                    'XCLIENT ADDR=198.51.100.22',
+                    'EHLO example.com',
+                    'MAIL FROM:<sender@example.com>'
+                ],
+                function (err, responses) {
+                    if (err) {
+                        return done(err);
+                    }
+                    expect(responses[1]).to.equal('501 Error: Bad command parameter syntax');
+                    // the rejected command must not have latched ADDR, otherwise the
+                    // retry would be answered with "550 Error: Not allowed"
+                    expect(responses[2]).to.include('220 ');
+                    expect(sessions).to.have.lengthOf(1);
+                    expect(sessions[0].remoteAddress).to.equal('198.51.100.22');
+                    done();
+                }
+            );
+        });
+
+        it('should reject an invalid ADDR without applying the other parameters', function (done) {
+            exchange(
+                ['XCLIENT NAME=proxied.example.com ADDR=not-an-ip', 'XCLIENT ADDR=198.51.100.22', 'EHLO example.com', 'MAIL FROM:<sender@example.com>'],
+                function (err, responses) {
+                    if (err) {
+                        return done(err);
+                    }
+                    expect(responses[1]).to.equal('501 Error: Bad command parameter syntax. Invalid address');
+                    expect(responses[2]).to.include('220 ');
+                    expect(sessions).to.have.lengthOf(1);
+                    expect(sessions[0].remoteAddress).to.equal('198.51.100.22');
+                    expect(sessions[0].clientHostname).to.not.equal('proxied.example.com');
+                    done();
+                }
+            );
+        });
+
+        it('should pass XCLIENT LOGIN through the default onAuth handler', function (done) {
+            exchange(['XCLIENT ADDR=198.51.100.22 LOGIN=relayuser', 'EHLO example.com', 'MAIL FROM:<sender@example.com>'], function (err, responses) {
+                if (err) {
+                    return done(err);
+                }
+                // the built-in onAuth answers XCLIENT with a bare callback(), which
+                // means "no identity established" and not "authentication failed"
+                expect(responses[1]).to.include('220 ');
+                expect(sessions).to.have.lengthOf(1);
+                expect(sessions[0].user).to.not.be.ok;
+                done();
+            });
+        });
+    });
+
+    describe('Reverse resolved hostname', function () {
+        let server;
+        let sockets;
+
+        let observed;
+
+        // starts a server whose resolver answers every address with the given PTR
+        // value, connects, and calls back once the greeting has been received
+        function connectWithPtr(hostname, callback) {
+            server = new SMTPServer({
+                logger: false,
+                authOptional: true,
+                resolver: {
+                    reverse: (ip, cb) => cb(null, [hostname])
+                },
+                onConnect(session, cb) {
+                    observed = session.clientHostname;
+                    cb();
+                }
+            });
+
+            server.listen(0, '127.0.0.1', err => {
+                if (err) {
+                    return callback(err);
+                }
+                let socket = net.connect(server.server.address().port, '127.0.0.1');
+                sockets.push(socket);
+                socket.on('error', callback);
+
+                // no commands, so this returns as soon as the greeting arrives
+                driveSocket(socket, [], true, (err, lines, greeting) => callback(err, greeting, observed));
+            });
+        }
+
+        beforeEach(function () {
+            sockets = [];
+            observed = undefined;
+        });
+
+        afterEach(function (done) {
+            sockets.forEach(socket => socket.destroy());
+            server.close(done);
+        });
+
+        it('should accept a regular hostname', function (done) {
+            connectWithPtr('mail.example.com', function (err, greeting, hostname) {
+                if (err) {
+                    return done(err);
+                }
+                expect(hostname).to.equal('mail.example.com');
+                done();
+            });
+        });
+
+        it('should accept an underscore in a PTR value', function (done) {
+            // underscores are not valid in hostnames but real ISPs do publish them
+            connectWithPtr('host_name.example.com', function (err, greeting, hostname) {
+                if (err) {
+                    return done(err);
+                }
+                expect(hostname).to.equal('host_name.example.com');
+                done();
+            });
+        });
+
+        it('should strip the trailing dot of a root terminated PTR value', function (done) {
+            connectWithPtr('mail.example.com.', function (err, greeting, hostname) {
+                if (err) {
+                    return done(err);
+                }
+                expect(hostname).to.equal('mail.example.com');
+                done();
+            });
+        });
+
+        it('should fall back to the IP address for a PTR value with CRLF', function (done) {
+            connectWithPtr('evil.example.com\r\n250 injected', function (err, greeting, hostname) {
+                if (err) {
+                    return done(err);
+                }
+                expect(hostname).to.equal('[127.0.0.1]');
+                expect(greeting).to.not.include('injected');
+                done();
+            });
+        });
+
+        it('should fall back to the IP address for an overlong PTR value', function (done) {
+            connectWithPtr('a'.repeat(300) + '.example.com', function (err, greeting, hostname) {
+                if (err) {
+                    return done(err);
+                }
+                expect(hostname).to.equal('[127.0.0.1]');
+                done();
+            });
+        });
+    });
+
+    describe('onAuth callback contract', function () {
+        let server;
+        let socket;
+
+        afterEach(function (done) {
+            if (socket) {
+                socket.destroy();
+            }
+            server.close(done);
+        });
+
+        // command sequences that reach onAuth for every built-in mechanism
+        let flows = {
+            PLAIN: ['AUTH PLAIN ' + Buffer.from('\x00user\x00pass').toString('base64')],
+            LOGIN: ['AUTH LOGIN', Buffer.from('user').toString('base64'), Buffer.from('pass').toString('base64')],
+            'CRAM-MD5': ['AUTH CRAM-MD5', Buffer.from('user ' + '0123456789abcdef'.repeat(2)).toString('base64')],
+            XOAUTH2: ['AUTH XOAUTH2 ' + Buffer.from('user=user\x01auth=Bearer token\x01\x01').toString('base64')]
+        };
+
+        // an application may report a failure with a bare callback(), this must
+        // produce an ordinary authentication failure and not an internal error
+        Object.keys(flows).forEach(method => {
+            it('should reject AUTH ' + method + ' when onAuth calls back with nothing', function (done) {
+                let authenticated = 0;
+
+                server = new SMTPServer({
+                    logger: false,
+                    allowInsecureAuth: true,
+                    authMethods: Object.keys(flows),
+                    onAuth(auth, session, callback) {
+                        authenticated++;
+                        callback();
+                    }
+                });
+
+                server.listen(0, '127.0.0.1', err => {
+                    if (err) {
+                        return done(err);
+                    }
+                    socket = net.connect(server.server.address().port, '127.0.0.1');
+                    socket.on('error', done);
+
+                    let commands = ['EHLO example.com'].concat(flows[method]).map(command => command + '\r\n');
+
+                    driveSocket(socket, commands, true, function (err, lines) {
+                        if (err) {
+                            return done(err);
+                        }
+                        expect(authenticated).to.equal(1);
+                        // 334 means the mechanism asked for one more round trip (XOAUTH2),
+                        // anything else has to be a clean failure and not an internal error
+                        let last = lines[lines.length - 1];
+                        expect(last).to.match(/^(334|5\d\d) /);
+                        expect(last).to.not.include('421 ');
+                        expect(last).to.not.include('Cannot read properties');
+                        done();
+                    });
+                });
+            });
+        });
+    });
+
     describe('Lenient address parsing', function () {
         it('should reject a non-compliant sender address by default', function (done) {
             let PORT = 1336;
@@ -1972,6 +2551,25 @@ describe('SMTPServer', function () {
                 });
                 socket.write('PROXY TCP4 1.2.3.4 203.0.113.7 35646 80\r\n');
             });
+        });
+
+        it('should reject a PROXY header whose source address is not an IP', function (done) {
+            // the address ends up in SMTP responses, logs and Received headers, so a
+            // value carrying an embedded CR must never reach the connection
+            let socket = net.connect(PORT, '127.0.0.1', function () {
+                let buffers = [];
+                socket.on('data', function (chunk) {
+                    buffers.push(chunk);
+                });
+                socket.on('end', function () {
+                    let data = Buffer.concat(buffers).toString();
+                    expect(data.indexOf('* BAD Invalid PROXY header')).to.equal(0);
+                    expect(data).to.not.include('220 ');
+                    done();
+                });
+                socket.write('PROXY TCP4 1.2.3\r.4 127.0.0.1 1111 2222\r\n');
+            });
+            socket.on('error', function () {});
         });
 
         it('should deliver "* BAD" diagnostic before closing on invalid PROXY header', function (done) {

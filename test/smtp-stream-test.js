@@ -99,4 +99,138 @@ describe('SMTPStream', function () {
         }
         stream.end('\r\n.\r\nQUIT');
     });
+
+    it('should not overflow the stack on heavily pipelined commands', function (done) {
+        let stream = new SMTPStream();
+
+        let count = 0;
+        let total = 100000;
+
+        stream.oncommand = function (cmd, cb) {
+            expect(cmd.toString()).to.equal('NOOP');
+            count++;
+            // complete every command synchronously
+            cb();
+        };
+
+        stream.on('error', done);
+
+        stream.on('finish', () => {
+            expect(count).to.equal(total);
+            done();
+        });
+
+        stream.end('NOOP\r\n'.repeat(total));
+    });
+
+    it('should not get stuck when a command handler throws', function () {
+        let stream = new SMTPStream();
+
+        let seen = [];
+        let thrown = false;
+        let continuation;
+
+        stream.oncommand = function (cmd, cb) {
+            cmd = cmd.toString();
+            seen.push(cmd);
+            if (cmd === 'BOOM') {
+                continuation = cb;
+                throw new Error('handler failed');
+            }
+            if (cb) {
+                return cb();
+            }
+        };
+
+        try {
+            stream.write('BOOM\r\nNOOP\r\nQUIT\r\n');
+        } catch {
+            thrown = true;
+        }
+
+        expect(thrown).to.be.true;
+        expect(seen).to.deep.equal(['BOOM']);
+
+        // the parser must still accept the continuation, otherwise the connection
+        // would hang until the socket times out
+        continuation();
+        expect(seen).to.deep.equal(['BOOM', 'NOOP', 'QUIT']);
+    });
+
+    // How the payload is split across TCP segments is under the sender's control and
+    // must never change the message the application receives. Every case below writes
+    // "DATA\r\n" first and then the listed chunks, the last one through end()
+    [
+        {
+            title: 'a dot-stuffed first line arriving as its own chunk',
+            chunks: ['..', '\r\nMAIL FROM:<a@b.c>\r\n.\r\nQUIT'],
+            // the leading ".." is content (a single dot), not the end of DATA, so the
+            // commands behind it stay part of the body instead of being executed
+            expected: '.\r\nMAIL FROM:<a@b.c>\r\n'
+        },
+        {
+            title: 'dot-stuffing split across two chunks',
+            // wire "...." is a single dot-stuffed line of "..."
+            chunks: ['..', '..', '\r\n.\r\nQUIT'],
+            expected: '...\r\n'
+        },
+        {
+            title: 'an empty message with a chunk-split terminator',
+            chunks: ['.', '\r\nQUIT'],
+            expected: ''
+        },
+        {
+            title: 'a message in one chunk',
+            chunks: ['Subject: test\r\n\r\nHello\r\n.\r\nQUIT'],
+            expected: 'Subject: test\r\n\r\nHello\r\n'
+        },
+        {
+            title: 'a message whose terminator is split',
+            chunks: ['Subject: test\r\n\r\nHello\r\n.\r', '\nQUIT'],
+            expected: 'Subject: test\r\n\r\nHello\r\n'
+        },
+        {
+            title: 'a message whose last line is split',
+            chunks: ['Subject: test\r\n\r\nHello', '\r\n.\r\nQUIT'],
+            expected: 'Subject: test\r\n\r\nHello\r\n'
+        },
+        {
+            title: 'a message delivered byte by byte',
+            chunks: 'Subject: test\r\n\r\nHello\r\n.\r\nQUIT'.split(''),
+            expected: 'Subject: test\r\n\r\nHello\r\n'
+        }
+    ].forEach(({ title, chunks, expected }) => {
+        it('should read ' + title, function (done) {
+            let stream = new SMTPStream();
+
+            let expecting = ['DATA', 'QUIT'];
+
+            stream.oncommand = function (cmd, cb) {
+                cmd = cmd.toString();
+                expect(cmd).to.deep.equal(expecting.shift());
+
+                let output = '';
+                if (cmd === 'DATA') {
+                    let datastream = stream.startDataMode();
+                    datastream.on('data', function (chunk) {
+                        output += chunk.toString();
+                    });
+                    datastream.on('end', function () {
+                        expect(output).to.equal(expected);
+                        expect(stream.dataBytes).to.equal(expected.length);
+                        stream.continue();
+                    });
+                }
+
+                if (cb) {
+                    return cb();
+                } else {
+                    return done();
+                }
+            };
+
+            stream.write('DATA\r\n');
+            chunks.forEach((chunk, i) => (i === chunks.length - 1 ? stream.end(chunk) : stream.write(chunk)));
+        });
+    });
 });
