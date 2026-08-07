@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.19.3](https://github.com/nodemailer/smtp-server/compare/v3.19.2...v3.19.3) (2026-08-07)
+
+
+### Bug Fixes
+
+* harden STARTTLS, DATA parsing and proxy command handling ([8ce6ba0](https://github.com/nodemailer/smtp-server/commit/8ce6ba070449ad641859e7e404e2d4185bc877a7))
+* update dependencies (nodemailer 9.0.5) ([247b8c9](https://github.com/nodemailer/smtp-server/commit/247b8c9f66b7abe0be1a48c142489bf394e12b8b))
+
 ## [3.19.2](https://github.com/nodemailer/smtp-server/compare/v3.19.1...v3.19.2) (2026-07-05)
 
 
