@@ -12,17 +12,17 @@
     "license": "MIT-0",
     "dependencies": {
         "ipv6-normalize": "1.0.1",
-        "nodemailer": "9.0.5",
+        "nodemailer": "9.0.6",
         "punycode.js": "2.3.1"
     },
     "devDependencies": {
         "chai": "4.4.1",
-        "eslint": "10.8.0",
+        "eslint": "10.9.1",
         "eslint-config-nodemailer": "1.2.0",
         "eslint-config-prettier": "10.1.8",
         "grunt": "1.6.3",
         "grunt-cli": "1.5.0",
-        "grunt-eslint": "26.0.0",
+        "grunt-eslint": "27.0.0",
         "grunt-mocha-test": "0.13.3",
         "mocha": "10.7.3",
         "pem": "1.14.8",
