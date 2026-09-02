@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.7](https://github.com/nodemailer/smtp-server/compare/v3.19.6...v3.19.7) (2026-09-02)
+
+
+### Bug Fixes
+
+* destroy a half-open connection once the socket timeout fires ([dd70e7f](https://github.com/nodemailer/smtp-server/commit/dd70e7f76422392cef4324282fc750e3aaa19d32))
+
 ## [3.19.6](https://github.com/nodemailer/smtp-server/compare/v3.19.5...v3.19.6) (2026-09-01)
 
 
