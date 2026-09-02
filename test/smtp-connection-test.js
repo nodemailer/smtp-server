@@ -894,6 +894,28 @@ describe('SMTPServer', function () {
             });
         });
 
+        it('should destroy a half-open socket once the socket timeout fires', function (done) {
+            // after a 421 the server ends its side and waits for the client to close, a
+            // client that keeps its side open must not be able to pin the socket forever
+            let halfOpenServer = new SMTPServer({ logger: false, socketTimeout: 500 });
+            halfOpenServer.listen(0, '127.0.0.1', () => {
+                let socket = net.connect({ port: halfOpenServer.server.address().port, host: '127.0.0.1', allowHalfOpen: true }, () => {
+                    driveSocket(socket, [Buffer.alloc(5 * 1024, 0x41)], true, (err, lines) => {
+                        expect(err).to.not.exist;
+                        expect(lines.pop()).to.include('421');
+                        socket.once('end', () => {
+                            // the server has sent its FIN, keep our side open. Closing the
+                            // server must not wait for us, only for the socket timeout
+                            halfOpenServer.close(() => {
+                                socket.destroy();
+                                done();
+                            });
+                        });
+                    });
+                });
+            });
+        });
+
         it('should reject early talker', function (done) {
             let socket = net.connect(PORT, '127.0.0.1', function () {
                 let buffers = [];

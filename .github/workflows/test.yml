@@ -29,3 +29,21 @@ jobs:
                   cache: npm
             - run: npm install
             - run: npm test
+
+    # smtp-server is the test server of nodemailer, which also runs under Bun,
+    # so the suite is run under the latest Bun release as well
+    bun:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v6
+            - name: Use Node.js 24.x
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24.x
+                  cache: npm
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+            - run: npm install
+            - run: npm run test:bun

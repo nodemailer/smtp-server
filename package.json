@@ -5,6 +5,7 @@
     "main": "lib/smtp-server.js",
     "scripts": {
         "test": "grunt",
+        "test:bun": "bun node_modules/.bin/_mocha --exit test/*-test.js",
         "format": "prettier --write \"**/*.{js,json,md}\"",
         "update": "rm -rf node_modules package-lock.json && ncu -u && npm install"
     },
