@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.8](https://github.com/nodemailer/smtp-server/compare/v3.19.7...v3.19.8) (2026-09-06)
+
+
+### Bug Fixes
+
+* **deps:** move to nodemailer 10 and raise the Node floor to 20 ([ac667d2](https://github.com/nodemailer/smtp-server/commit/ac667d29b10e09ad5cded77efe0185d7eed7213b))
+
 ## [3.19.7](https://github.com/nodemailer/smtp-server/compare/v3.19.6...v3.19.7) (2026-09-02)
 
 
