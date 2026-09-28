@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.19.15](https://github.com/nodemailer/smtp-server/compare/v3.19.14...v3.19.15) (2026-09-28)
+
+
+### Bug Fixes
+
+* answer 501 to valueless parameters, time out sockets before connect, enforce the line limit on complete lines ([7baa137](https://github.com/nodemailer/smtp-server/commit/7baa137b5f6d546a9051cd0e2d76238e253cc6bf))
+* time out an implicit TLS handshake on the TLS socket, not the raw socket underneath it ([447a59a](https://github.com/nodemailer/smtp-server/commit/447a59a1de59ca8653175a077e30268d42acbe34))
+
 ## [3.19.14](https://github.com/nodemailer/smtp-server/compare/v3.19.13...v3.19.14) (2026-09-27)
 
 
