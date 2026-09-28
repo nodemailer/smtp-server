@@ -881,7 +881,7 @@ describe('SMTPServer', function () {
                     if (!started) {
                         started = true;
                         // send a large chunk with no newline to trigger maxCommandLength
-                        let longData = Buffer.alloc(5 * 1024, 0x41);
+                        let longData = Buffer.alloc(17 * 1024, 0x41);
                         socket.write(longData);
                     }
                 });
@@ -900,7 +900,7 @@ describe('SMTPServer', function () {
             let halfOpenServer = new SMTPServer({ logger: false, socketTimeout: 500 });
             halfOpenServer.listen(0, '127.0.0.1', () => {
                 let socket = net.connect({ port: halfOpenServer.server.address().port, host: '127.0.0.1', allowHalfOpen: true }, () => {
-                    driveSocket(socket, [Buffer.alloc(5 * 1024, 0x41)], true, (err, lines) => {
+                    driveSocket(socket, [Buffer.alloc(17 * 1024, 0x41)], true, (err, lines) => {
                         expect(err).to.not.exist;
                         expect(lines.pop()).to.include('421');
                         socket.once('end', () => {
