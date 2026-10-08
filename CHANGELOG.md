@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.18](https://github.com/nodemailer/smtp-server/compare/v3.19.17...v3.19.18) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** update nodemailer to 10.0.16 ([bf2d786](https://github.com/nodemailer/smtp-server/commit/bf2d78668e3dcb58efcf11d8774a9dfce26aad78))
+
 ## [3.19.17](https://github.com/nodemailer/smtp-server/compare/v3.19.16...v3.19.17) (2026-10-03)
 
 
