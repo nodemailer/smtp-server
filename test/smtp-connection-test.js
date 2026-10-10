@@ -3034,3 +3034,82 @@ describe('Connection socket options', () => {
         });
     });
 });
+
+describe('SNI', function () {
+    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+
+    let keys;
+
+    before(function (done) {
+        pem.createCertificate({ days: 1, selfSigned: true, commonName: 'sni.example.com' }, (err, result) => {
+            keys = result;
+            done(err);
+        });
+    });
+
+    // Opens a TLS session (implicit, or with STARTTLS first) requesting the given
+    // SNI name and calls back with the common name of the server certificate
+    function peerCommonName(port, starttls, servername, callback) {
+        let handshake = socket => {
+            let secureSocket = tls.connect({ socket, host: '127.0.0.1', port, servername, rejectUnauthorized: false }, () => {
+                let cn = secureSocket.getPeerCertificate().subject.CN;
+                secureSocket.destroy();
+                callback(null, cn);
+            });
+            secureSocket.once('error', callback);
+        };
+
+        if (!starttls) {
+            return handshake();
+        }
+
+        let socket = net.connect(port, '127.0.0.1');
+        socket.once('error', callback);
+        driveSocket(socket, ['EHLO example.com\r\n', 'STARTTLS\r\n'], true, (err, lines) => {
+            if (err) {
+                return callback(err);
+            }
+            expect(lines.pop()).to.match(/^220 /);
+            handshake(socket);
+        });
+    }
+
+    for (let [label, options, starttls] of [
+        ['implicit TLS', { secure: true }, false],
+        ['STARTTLS on a plaintext server', {}, true]
+    ]) {
+        it('should use sniOptions with ' + label, function (done) {
+            let server = new SMTPServer(
+                Object.assign(
+                    {
+                        logger: false,
+                        sniOptions: {
+                            'SNI.example.com': { key: keys.serviceKey, cert: keys.certificate }
+                        }
+                    },
+                    options
+                )
+            );
+            // a TLS 1.3 client is done before the server, so hanging up right away
+            // fails the server side of the handshake
+            server.on('error', () => false);
+            server.listen(0, '127.0.0.1', () => {
+                let port = server.server.address().port;
+                peerCommonName(port, starttls, 'sni.EXAMPLE.com', (err, matched) => {
+                    if (err) {
+                        return server.close(() => done(err));
+                    }
+                    expect(matched).to.equal('sni.example.com');
+                    peerCommonName(port, starttls, 'unknown.example.com', (err, fallback) => {
+                        if (err) {
+                            return server.close(() => done(err));
+                        }
+                        // the built-in default certificate
+                        expect(fallback).to.equal('localhost');
+                        server.close(done);
+                    });
+                });
+            });
+        });
+    }
+});

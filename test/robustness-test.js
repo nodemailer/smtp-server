@@ -4,6 +4,8 @@
 
 const chai = require('chai');
 const net = require('net');
+const tls = require('tls');
+const { Duplex } = require('stream');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
 
 const expect = chai.expect;
@@ -68,6 +70,23 @@ function idleClient(port, payload, callback) {
     });
     socket.on('error', () => false);
     socket.on('close', () => callback(Date.now() - start, received));
+}
+
+/**
+ * Polls until the predicate holds, or calls back with an error after the timeout
+ */
+function waitFor(predicate, timeout, callback) {
+    let deadline = Date.now() + timeout;
+    let poll = () => {
+        if (predicate()) {
+            return callback();
+        }
+        if (Date.now() > deadline) {
+            return callback(new Error('Timed out waiting for condition'));
+        }
+        setTimeout(poll, 10);
+    };
+    poll();
 }
 
 function listen(server, done) {
@@ -340,27 +359,95 @@ describe('Robustness', function () {
                     let socket = net.connect(port, '127.0.0.1', () => {
                         if (++opened === 2) {
                             // wait until the server registered both before opening the third
-                            let deadline = Date.now() + 3000;
-                            let poll = () => {
-                                if (server._pendingSockets.size < 2) {
-                                    if (Date.now() > deadline) {
-                                        return done(new Error('server did not register both pending sockets'));
+                            waitFor(
+                                () => server._pendingSockets.size >= 2,
+                                3000,
+                                err => {
+                                    if (err) {
+                                        return done(err);
                                     }
-                                    return setTimeout(poll, 10);
+                                    idleClient(port, false, elapsed => {
+                                        // refused at once, not after the socket timeout
+                                        expect(elapsed).to.be.below(1000);
+                                        sockets.forEach(s => s.destroy());
+                                        server.close(done);
+                                    });
                                 }
-                                idleClient(port, false, elapsed => {
-                                    // refused at once, not after the socket timeout
-                                    expect(elapsed).to.be.below(1000);
-                                    sockets.forEach(s => s.destroy());
-                                    server.close(done);
-                                });
-                            };
-                            poll();
+                            );
                         }
                     });
                     socket.on('error', () => false);
                     sockets.push(socket);
                 }
+            });
+        });
+
+        it('should destroy sockets still waiting for the PROXY header on close', function (done) {
+            let server = new SMTPServer({
+                logger: false,
+                useProxy: true,
+                socketTimeout: 60 * 1000
+            });
+            listen(server, port => {
+                let start = Date.now();
+                let pending = 2;
+                let finish = () => {
+                    if (--pending === 0) {
+                        // dropped right away, not after the close or socket timeout
+                        expect(Date.now() - start).to.be.below(3000);
+                        return done();
+                    }
+                };
+                idleClient(port, false, finish);
+                waitFor(
+                    () => server._pendingSockets.size > 0,
+                    3000,
+                    err => {
+                        if (err) {
+                            return done(err);
+                        }
+                        server.on('close', finish);
+                        server.close();
+                    }
+                );
+            });
+        });
+        it('should destroy sockets in the middle of an implicit TLS handshake on close', function (done) {
+            let server = new SMTPServer({
+                logger: false,
+                secure: true,
+                socketTimeout: 60 * 1000
+            });
+            server.on('error', () => false);
+            listen(server, port => {
+                let socket = net.connect(port, '127.0.0.1');
+                socket.on('error', () => false);
+                // a TLS client that sends its ClientHello but never sees the reply, so
+                // the server is stuck in the middle of the handshake
+                let wire = new Duplex({
+                    read() {},
+                    write(chunk, encoding, callback) {
+                        socket.write(chunk);
+                        callback();
+                    }
+                });
+                tls.connect({ socket: wire, rejectUnauthorized: false }).on('error', () => false);
+
+                let start = Date.now();
+                let pending = 2;
+                let finish = () => {
+                    if (--pending === 0) {
+                        expect(Date.now() - start).to.be.below(3000);
+                        return done();
+                    }
+                };
+                socket.on('close', finish);
+                socket.once('data', () => {
+                    // ServerHello arrived. Destroying the raw socket under the TLS wrap
+                    // at this point would crash the process
+                    server.on('close', finish);
+                    server.close();
+                });
             });
         });
     });
