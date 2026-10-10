@@ -3002,3 +3002,35 @@ describe('SMTPServer', function () {
         });
     });
 });
+
+describe('Connection socket options', () => {
+    it('should turn Nagle off for accepted connections', function (done) {
+        // Replies to pipelined commands are written one by one, Nagle would hold the later ones
+        // back until the client acknowledged the earlier ones
+        const calls = [];
+        const setNoDelay = net.Socket.prototype.setNoDelay;
+        net.Socket.prototype.setNoDelay = function (...args) {
+            calls.push({ socket: this, args });
+            return setNoDelay.apply(this, args);
+        };
+
+        const server = new SMTPServer({ logger: false, disabledCommands: ['STARTTLS', 'AUTH'] });
+        server.listen(0, '127.0.0.1', () => {
+            const client = net.connect(server.server.address().port, '127.0.0.1');
+            client.once('data', () => {
+                net.Socket.prototype.setNoDelay = setNoDelay;
+                const accepted = [...server.connections][0]._socket;
+                const call = calls.find(entry => entry.socket === accepted);
+                try {
+                    expect(call).to.exist;
+                    expect(call.args).to.deep.equal([true]);
+                } catch (err) {
+                    client.destroy();
+                    return server.close(() => done(err));
+                }
+                client.end('QUIT\r\n');
+                client.on('close', () => server.close(done));
+            });
+        });
+    });
+});
