@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.19.19](https://github.com/nodemailer/smtp-server/compare/v3.19.18...v3.19.19) (2026-10-10)
+
+
+### Bug Fixes
+
+* turn Nagle off for accepted connections ([ebf242a](https://github.com/nodemailer/smtp-server/commit/ebf242aa1ed8f37cfd0286f0a36a7708f566184f))
+
 ## [3.19.18](https://github.com/nodemailer/smtp-server/compare/v3.19.17...v3.19.18) (2026-10-08)
 
 
