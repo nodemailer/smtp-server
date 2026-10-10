@@ -1,0 +1,4 @@
+# Pipelined commands (RFC 2920), DATA is the last command of a group
+EHLO client.example.com
+> MAIL FROM:<sender@example.com>\r\nRCPT TO:<a@example.com>\r\nRCPT TO:<bad\r\nRCPT TO:<b@example.com>\r\nDATA\r\n
+> Subject: pipelined\r\n\r\nbody\r\n.\r\nQUIT\r\n

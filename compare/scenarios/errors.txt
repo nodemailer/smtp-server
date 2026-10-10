@@ -1,0 +1,7 @@
+# Malformed input
+EHLO client.example.com
+> \r\n
+>    \r\n
+> NOOP\n
+> NO\x00OP\r\n
+> GET / HTTP/1.1\r\n

@@ -4,7 +4,7 @@ module.exports = function (grunt) {
     // Project configuration.
     grunt.initConfig({
         eslint: {
-            all: ['lib/*.js', 'test/*.js', 'examples/*.js', 'Gruntfile.js']
+            all: ['lib/*.js', 'test/*.js', 'examples/*.js', 'compare/*.js', 'Gruntfile.js', 'eslint.config.js']
         },
 
         mochaTest: {

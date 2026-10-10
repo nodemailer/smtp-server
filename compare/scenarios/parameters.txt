@@ -1,0 +1,37 @@
+# MAIL and RCPT parameters: SIZE (RFC 1870), BODY (RFC 6152), SMTPUTF8 (RFC 6531), DSN (RFC 3461)
+EHLO client.example.com
+MAIL FROM:<sender@example.com> SIZE=1000
+RSET
+MAIL FROM:<sender@example.com> SIZE=2000000
+RSET
+MAIL FROM:<sender@example.com> SIZE=abc
+RSET
+MAIL FROM:<sender@example.com> SIZE
+RSET
+MAIL FROM:<sender@example.com> BODY=8BITMIME
+RSET
+MAIL FROM:<sender@example.com> BODY=7BIT
+RSET
+MAIL FROM:<sender@example.com> BODY=BINARYMIME
+RSET
+MAIL FROM:<sender@example.com> BODY=FOO
+RSET
+MAIL FROM:<sender@example.com> SMTPUTF8
+RSET
+MAIL FROM:<sender@example.com> SMTPUTF8=yes
+RSET
+MAIL FROM:<sender@example.com> RET=HDRS ENVID=QQ314159
+RSET
+MAIL FROM:<sender@example.com> RET=FOO
+RSET
+MAIL FROM:<sender@example.com> RET=FULL RET=HDRS
+RSET
+MAIL FROM:<sender@example.com> FOO=BAR
+RSET
+MAIL FROM:<sender@example.com>
+RCPT TO:<rcpt@example.com> NOTIFY=SUCCESS,FAILURE ORCPT=rfc822;rcpt@example.com
+RCPT TO:<rcpt@example.com> NOTIFY=NEVER
+RCPT TO:<rcpt@example.com> NOTIFY=NEVER,SUCCESS
+RCPT TO:<rcpt@example.com> NOTIFY=FOO
+RCPT TO:<rcpt@example.com> ORCPT=foo
+RCPT TO:<rcpt@example.com> FOO=BAR

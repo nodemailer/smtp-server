@@ -1,0 +1,32 @@
+# Command order (RFC 5321 section 4.1.4) and basic commands
+MAIL FROM:<sender@example.com>
+RCPT TO:<rcpt@example.com>
+DATA
+NOOP
+HELP
+EHLO
+EHLO client example.com
+EHLO client.example.com
+RCPT TO:<rcpt@example.com>
+DATA
+MAIL FROM:<sender@example.com>
+MAIL FROM:<sender@example.com>
+DATA
+RCPT TO:<rcpt@example.com>
+RSET
+RCPT TO:<rcpt@example.com>
+MAIL FROM:<sender@example.com>
+EHLO client.example.com
+RCPT TO:<rcpt@example.com>
+HELO
+HELO client.example.com
+MAIL FROM:<sender@example.com>
+HELO client.example.com
+RCPT TO:<rcpt@example.com>
+VRFY user
+VRFY
+EXPN list
+FOO
+noop
+QUIT
+NOOP

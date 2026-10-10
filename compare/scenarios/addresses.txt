@@ -1,0 +1,35 @@
+# MAIL FROM and RCPT TO address syntax (RFC 5321 section 4.1.2)
+EHLO client.example.com
+MAIL FROM:<>
+RSET
+MAIL FROM:sender@example.com
+RSET
+MAIL FROM: <sender@example.com>
+RSET
+MAIL FROM:<sender@example.com
+RSET
+MAIL FROM:<"quoted local"@example.com>
+RSET
+MAIL FROM:<user@[192.0.2.1]>
+RSET
+MAIL FROM:<user@[IPv6:2001:db8::1]>
+RSET
+MAIL FROM:<user@[300.1.1.1]>
+RSET
+MAIL FROM:<@relay.example.com:user@example.com>
+RSET
+MAIL FROM:<user@>
+RSET
+MAIL FROM:<@example.com>
+RSET
+MAIL FROM:<user@exa mple.com>
+RSET
+MAIL FROM:<sender@example.com>
+RCPT TO:<postmaster>
+RCPT TO:<Postmaster>
+RCPT TO:<rcpt@example.com>
+RCPT TO:rcpt@example.com
+RCPT TO:<>
+RCPT TO:<rcpt@example.com
+RCPT TO:<üser@example.com>
+MAIL FROM:<x@example.com>

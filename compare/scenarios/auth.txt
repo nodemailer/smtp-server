@@ -1,0 +1,32 @@
+# SASL authentication (RFC 4954)
+AUTH PLAIN AHVzZXIAcGFzcw==
+EHLO client.example.com
+MAIL FROM:<sender@example.com>
+RSET
+AUTH FOO
+AUTH PLAIN a b
+AUTH PLAIN !!!
+AUTH PLAIN AHVzZXIAd3Jvbmc=
+AUTH PLAIN
+*
+AUTH LOGIN
+*
+AUTH LOGIN
+dXNlcg==
+*
+AUTH LOGIN
+dXNlcg==
+cGFzcw==
+AUTH PLAIN AHVzZXIAcGFzcw==
+EHLO client.example.com
+!reconnect
+EHLO client.example.com
+AUTH PLAIN
+AHVzZXIAcGFzcw==
+!reconnect
+EHLO client.example.com
+AUTH PLAIN AHVzZXIAcGFzcw==
+!reconnect
+EHLO client.example.com
+AUTH LOGIN dXNlcg==
+cGFzcw==

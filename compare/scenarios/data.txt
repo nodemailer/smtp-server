@@ -1,0 +1,19 @@
+# DATA transfer, dot-stuffing and transaction reset (RFC 5321 section 4.1.1.4)
+EHLO client.example.com
+MAIL FROM:<sender@example.com>
+RCPT TO:<rcpt@example.com>
+DATA
+> Subject: test\r\n\r\n..leading dot\r\nbody\r\n
+> .\r\n
+RCPT TO:<rcpt@example.com>
+MAIL FROM:<sender@example.com>
+RCPT TO:<rcpt@example.com>
+RCPT TO:<other@example.com>
+DATA
+> \r\n.\r\n
+DATA
+MAIL FROM:<sender@example.com>
+RCPT TO:<rcpt@example.com>
+DATA
+> .\r\n
+QUIT
