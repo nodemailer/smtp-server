@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -125,7 +123,7 @@ function mutate(random, command) {
 }
 
 describe('Fuzzing', function () {
-    this.timeout(60 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(60 * 1000);
 
     let fuzz = async ({ server, port }) => {
         let errors = [];
@@ -237,7 +235,7 @@ describe('Fuzzing', function () {
 });
 
 describe('Fragmented input', function () {
-    this.timeout(30 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(30 * 1000);
 
     // Lines starting with a dot are dot-stuffed on the wire (RFC 5321 section 4.5.2)
     const MESSAGE = 'Subject: fragments\r\n\r\n.leading dot\r\n..two dots\r\nlast line without dot';

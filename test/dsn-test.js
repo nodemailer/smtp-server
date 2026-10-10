@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -11,7 +9,7 @@ const expect = chai.expect;
 chai.config.includeStack = true;
 
 describe('DSN (Delivery Status Notification) Support', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     describe('Unit Tests for DSN Parameter Parsing', function () {
         it('should parse DSN parameters in _parseAddressCommand', function () {

@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -18,7 +16,7 @@ const { driveSocket } = require('./test-client');
 chai.config.includeStack = true;
 
 describe('SMTPServer', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     describe('Unit tests', function () {
         describe('Session ID generation', function () {
@@ -569,7 +567,7 @@ describe('SMTPServer', function () {
     });
 
     describe('Plaintext server with no connection limit', function () {
-        this.timeout(60 * 1000); // eslint-disable-line no-invalid-this
+        this.timeout(60 * 1000);
 
         let PORT;
 
@@ -3020,7 +3018,7 @@ describe('Connection socket options', () => {
 });
 
 describe('SNI', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     let keys;
 

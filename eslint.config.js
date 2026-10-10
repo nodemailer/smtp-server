@@ -1,67 +1,112 @@
-const prettier = require('eslint-config-prettier');
+const js = require('@eslint/js');
 
 module.exports = [
     {
-        ignores: ['node_modules/**', 'coverage/**', '*.min.js']
+        ignores: ['node_modules/**', 'coverage/**']
     },
+    js.configs.recommended,
     {
-        files: ['**/*.js'],
         languageOptions: {
-            ecmaVersion: 2022,
+            ecmaVersion: 2020,
             sourceType: 'commonjs',
             globals: {
-                console: 'readonly',
-                process: 'readonly',
+                // Node.js globals
                 Buffer: 'readonly',
                 __dirname: 'readonly',
                 __filename: 'readonly',
-                module: 'readonly',
+                console: 'readonly',
+                exports: 'writable',
+                global: 'readonly',
+                module: 'writable',
+                process: 'readonly',
                 require: 'readonly',
-                exports: 'readonly',
+                BigInt: 'readonly',
+                setImmediate: 'readonly',
+                clearImmediate: 'readonly',
                 setTimeout: 'readonly',
                 clearTimeout: 'readonly',
                 setInterval: 'readonly',
                 clearInterval: 'readonly',
-                setImmediate: 'readonly',
-                clearImmediate: 'readonly'
+                AbortController: 'readonly',
+                AbortSignal: 'readonly',
+                URL: 'readonly',
+                URLSearchParams: 'readonly',
+                structuredClone: 'readonly',
+                // Test globals
+                it: 'readonly',
+                describe: 'readonly',
+                before: 'readonly',
+                after: 'readonly',
+                beforeEach: 'readonly',
+                afterEach: 'readonly'
             }
         },
+        files: ['**/*.js'],
         rules: {
-            // Possible Problems
-            'for-direction': 'error',
-            'no-await-in-loop': 'error',
-            'no-duplicate-case': 'error',
-            'no-empty': 'error',
-            'no-empty-character-class': 'error',
-            'no-fallthrough': 'error',
-            'no-regex-spaces': 'error',
-            'no-unused-vars': 'error',
-
-            // Best Practices
-            eqeqeq: 'error',
-            'dot-notation': 'error',
-            curly: 'error',
-            'no-eval': 'error',
-            'no-invalid-this': 'error',
-            radix: ['error', 'always'],
-            'no-use-before-define': ['error', 'nofunc'],
-            'no-redeclare': ['error', { builtinGlobals: true }],
-            'no-unused-expressions': ['error', { allowShortCircuit: true }],
-            'no-div-regex': 'error',
-            'no-new': 'error',
-            'new-cap': 'error',
-
-            // Node.js
-            'handle-callback-err': 'error',
-            'callback-return': ['error', ['callback', 'cb', 'done']],
-
-            // Stylistic (non-formatting)
-            'quote-props': ['error', 'as-needed'],
-
-            // Strict Mode
-            strict: ['error', 'global']
+            // Disable rules that conflict with the project's style
+            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
+            'no-prototype-builtins': 'off',
+            // Disable all formatting rules (handled by Prettier)
+            'array-bracket-spacing': 'off',
+            'arrow-parens': 'off',
+            'arrow-spacing': 'off',
+            'block-spacing': 'off',
+            'brace-style': 'off',
+            'comma-dangle': 'off',
+            'comma-spacing': 'off',
+            'comma-style': 'off',
+            'computed-property-spacing': 'off',
+            'dot-location': 'off',
+            'eol-last': 'off',
+            'func-call-spacing': 'off',
+            'function-call-argument-newline': 'off',
+            'function-paren-newline': 'off',
+            'generator-star-spacing': 'off',
+            'implicit-arrow-linebreak': 'off',
+            indent: 'off',
+            'jsx-quotes': 'off',
+            'key-spacing': 'off',
+            'keyword-spacing': 'off',
+            'linebreak-style': 'off',
+            'lines-around-comment': 'off',
+            'lines-between-class-members': 'off',
+            'max-len': 'off',
+            'multiline-ternary': 'off',
+            'new-parens': 'off',
+            'newline-per-chained-call': 'off',
+            'no-extra-parens': 'off',
+            'no-mixed-spaces-and-tabs': 'off',
+            'no-multi-spaces': 'off',
+            'no-multiple-empty-lines': 'off',
+            'no-tabs': 'off',
+            'no-trailing-spaces': 'off',
+            'no-whitespace-before-property': 'off',
+            'nonblock-statement-body-position': 'off',
+            'object-curly-newline': 'off',
+            'object-curly-spacing': 'off',
+            'object-property-newline': 'off',
+            'one-var-declaration-per-line': 'off',
+            'operator-linebreak': 'off',
+            'padded-blocks': 'off',
+            'padding-line-between-statements': 'off',
+            'quote-props': 'off',
+            quotes: 'off',
+            'rest-spread-spacing': 'off',
+            semi: 'off',
+            'semi-spacing': 'off',
+            'semi-style': 'off',
+            'space-before-blocks': 'off',
+            'space-before-function-paren': 'off',
+            'space-in-parens': 'off',
+            'space-infix-ops': 'off',
+            'space-unary-ops': 'off',
+            'switch-colon-spacing': 'off',
+            'template-curly-spacing': 'off',
+            'template-tag-spacing': 'off',
+            'unicode-bom': 'off',
+            'wrap-iife': 'off',
+            'wrap-regex': 'off',
+            'yield-star-spacing': 'off'
         }
-    },
-    // Apply prettier config to disable conflicting rules
-    prettier
+    }
 ];

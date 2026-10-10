@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -134,7 +132,7 @@ const CASES = {
 };
 
 describe('Protocol', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     for (let [group, cases] of Object.entries(CASES)) {
         describe(group, function () {

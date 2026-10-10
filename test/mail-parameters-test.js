@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -11,7 +9,7 @@ const expect = chai.expect;
 chai.config.includeStack = true;
 
 describe('MAIL FROM Parameters (BODY, SMTPUTF8, REQUIRETLS)', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     describe('Unit Tests for Parameter Parsing', function () {
         it('should parse BODY parameter in _parseAddressCommand', () => {

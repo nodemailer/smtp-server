@@ -37,6 +37,7 @@ function validateReply(block) {
         }
 
         // a bare CR or LF, or any other control character, would let the text split the reply
+        // eslint-disable-next-line no-control-regex
         if (/[\x00-\x08\x0A-\x1F\x7F]/.test(line)) {
             fail('control character in line ' + i);
         }

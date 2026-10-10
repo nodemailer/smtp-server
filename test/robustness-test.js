@@ -1,5 +1,3 @@
-/* eslint no-unused-expressions:0, prefer-arrow-callback: 0 */
-
 'use strict';
 
 const chai = require('chai');
@@ -74,7 +72,7 @@ function listen(server, done) {
 }
 
 describe('Robustness', function () {
-    this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
+    this.timeout(10 * 1000);
 
     describe('Parameters without a value', function () {
         let server;
