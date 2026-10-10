@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.19.21](https://github.com/nodemailer/smtp-server/compare/v3.19.20...v3.19.21) (2026-10-10)
+
+
+### Bug Fixes
+
+* align replies with RFC 5321 and fix a crash after STARTTLS ([40e7480](https://github.com/nodemailer/smtp-server/commit/40e74804dd5872ad1f4e7957e55fb31ab493ffd3))
+* honor sniOptions for STARTTLS and drop pending sockets on close ([0aed41d](https://github.com/nodemailer/smtp-server/commit/0aed41daf086ab6aa2153482a62c6e4383e0e02c))
+* refuse XFORWARD after XCLIENT ADDR and validate proxy NAME values ([bca4889](https://github.com/nodemailer/smtp-server/commit/bca4889910548773cbb6a51b5144599b426616a9))
+
 ## [3.19.20](https://github.com/nodemailer/smtp-server/compare/v3.19.19...v3.19.20) (2026-10-10)
 
 
