@@ -11,6 +11,7 @@ const PLAIN = { disabledCommands: ['AUTH'] };
 const ENHANCED = { disabledCommands: ['AUTH'], hideENHANCEDSTATUSCODES: false };
 const XCLIENT = { disabledCommands: ['AUTH'], useXClient: true, useXForward: true };
 const LMTP = { lmtp: true, disabledCommands: ['AUTH'] };
+const DSN = { disabledCommands: ['AUTH'], hideDSN: false };
 const AUTH = {
     authMethods: ['PLAIN', 'LOGIN'],
     allowInsecureAuth: true,
@@ -54,10 +55,45 @@ const CASES = {
         ['NOOP before EHLO', PLAIN, ['NOOP'], [250]],
         ['HELP', PLAIN, ['HELP'], [214]],
         ['VRFY', PLAIN, ['VRFY user'], [252]],
+        ['VRFY without an argument', PLAIN, ['VRFY'], [501]],
         ['unknown command', PLAIN, ['EXPN list'], [500]],
         ['empty line', PLAIN, [''], [500]],
         ['disabled command', { disabledCommands: ['AUTH', 'VRFY'] }, ['VRFY user'], [500]],
         ['QUIT closes the connection', PLAIN, ['QUIT', 'NOOP'], [221, null]]
+    ],
+
+    'Addresses (RFC 5321 section 4.1.2)': [
+        ['null sender', PLAIN, ['EHLO client.example.com', 'MAIL FROM:<>'], [250, 250]],
+        ['domainless postmaster recipient', PLAIN, ['EHLO client.example.com', MAIL, 'RCPT TO:<postmaster>', 'RCPT TO:<PostMaster>'], [250, 250, 250, 250]],
+        ['domainless sender', PLAIN, ['EHLO client.example.com', 'MAIL FROM:<postmaster>'], [250, 501]],
+        ['domainless recipient other than postmaster', PLAIN, ['EHLO client.example.com', MAIL, 'RCPT TO:<user>'], [250, 250, 501]],
+        [
+            'source route',
+            PLAIN,
+            [
+                'EHLO client.example.com',
+                'MAIL FROM:<@relay.example.com,@other.example.com:sender@example.com>',
+                'RCPT TO:<@relay.example.com:rcpt@example.com>'
+            ],
+            [250, 250, 250]
+        ],
+        ['quoted local part', PLAIN, ['EHLO client.example.com', 'MAIL FROM:<"sender"@example.com>'], [250, 250]],
+        ['missing brackets', PLAIN, ['EHLO client.example.com', 'MAIL FROM:sender@example.com'], [250, 501]]
+    ],
+
+    'MAIL and RCPT parameters': [
+        ['SIZE with a number', ENHANCED, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=100'], [250, 250]],
+        ['SIZE that is not a number (RFC 1870)', ENHANCED, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=abc'], [250, 501]],
+        ['SIZE with a sign', ENHANCED, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=-1'], [250, 501]],
+        ['duplicate RET (RFC 3461 section 4)', DSN, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> RET=FULL RET=HDRS'], [250, 501]],
+        ['duplicate parameter on RCPT', DSN, ['EHLO client.example.com', MAIL, 'RCPT TO:<rcpt@example.com> NOTIFY=NEVER NOTIFY=SUCCESS'], [250, 250, 501]],
+        ['valid ORCPT', DSN, ['EHLO client.example.com', MAIL, 'RCPT TO:<rcpt@example.com> ORCPT=rfc822;rcpt@example.com'], [250, 250, 250]],
+        [
+            'ORCPT without an address type (RFC 3461 section 4.2)',
+            DSN,
+            ['EHLO client.example.com', MAIL, 'RCPT TO:<rcpt@example.com> ORCPT=rcpt@example.com'],
+            [250, 250, 501]
+        ]
     ],
 
     'Enhanced status codes (RFC 2034)': [
@@ -85,7 +121,7 @@ const CASES = {
         ['PLAIN without an initial response', AUTH, ['EHLO client.example.com', 'AUTH PLAIN', PLAIN_TOKEN, MAIL], [250, 334, 235, 250]],
         ['PLAIN aborted', AUTH, ['EHLO client.example.com', 'AUTH PLAIN', '*', MAIL], [250, 334, 501, 530]],
         ['PLAIN with too many arguments', AUTH, ['EHLO client.example.com', 'AUTH PLAIN a b'], [250, 501]],
-        ['PLAIN with an invalid token', AUTH, ['EHLO client.example.com', 'AUTH PLAIN AAAA'], [250, 500]],
+        ['PLAIN with an invalid token', AUTH, ['EHLO client.example.com', 'AUTH PLAIN AAAA'], [250, 501]],
         ['LOGIN in steps', AUTH, ['EHLO client.example.com', 'AUTH LOGIN', 'dXNlcg==', 'cGFzcw==', MAIL], [250, 334, 334, 235, 250]],
         ['LOGIN with the username as initial response', AUTH, ['EHLO client.example.com', 'AUTH LOGIN dXNlcg==', 'cGFzcw=='], [250, 334, 235]],
         ['LOGIN aborted at the username', AUTH, ['EHLO client.example.com', 'AUTH LOGIN', '*'], [250, 334, 501]],
@@ -160,6 +196,61 @@ describe('Protocol', function () {
             }
         });
     }
+
+    describe('Enhanced status code values (RFC 3463)', function () {
+        // the enhanced status code of every reply to the commands, null if there is none
+        let enhancedCodes = (options, commands) =>
+            withServer(Object.assign({ hideENHANCEDSTATUSCODES: false }, options), ({ port }) => chat(port, commands)).then(replies =>
+                replies.slice(1).map(reply => (reply.lines[0].match(/^\d{3}[ -](\d\.\d{1,3}\.\d{1,3}) /) || [])[1] || null)
+            );
+
+        it('should use 5.1.7 for a bad sender and 5.1.3 for a bad recipient', async function () {
+            expect(await enhancedCodes(PLAIN, ['EHLO client.example.com', 'MAIL FROM:<bad', MAIL, 'RCPT TO:<bad'])).to.deep.equal([
+                null,
+                '5.1.7',
+                '2.1.0',
+                '5.1.3'
+            ]);
+        });
+
+        it('should use 5.3.4 for a message over the size limit', async function () {
+            expect(
+                await enhancedCodes({ size: 1024, disabledCommands: ['AUTH'] }, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=2048'])
+            ).to.deep.equal([null, '5.3.4']);
+        });
+
+        it('should use 5.7.0 for a refused proxy command and none for the XCLIENT greeting', async function () {
+            expect(await enhancedCodes(XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'XCLIENT ADDR=192.0.2.2', 'XFORWARD ADDR=192.0.2.3'])).to.deep.equal([
+                null,
+                '5.7.0',
+                '5.7.0'
+            ]);
+        });
+    });
+
+    describe('Source routes', function () {
+        it('should drop the source route from the address', async function () {
+            let addresses = [];
+            let options = Object.assign({}, PLAIN, {
+                onMailFrom(address, session, callback) {
+                    addresses.push(address.address);
+                    callback();
+                },
+                onRcptTo(address, session, callback) {
+                    addresses.push(address.address);
+                    callback();
+                }
+            });
+            await withServer(options, ({ port }) =>
+                chat(port, [
+                    'EHLO client.example.com',
+                    'MAIL FROM:<@relay.example.com:sender@example.com>',
+                    'RCPT TO:<@a.example.com,@b.example.com:rcpt@example.com>'
+                ])
+            );
+            expect(addresses).to.deep.equal(['sender@example.com', 'rcpt@example.com']);
+        });
+    });
 
     describe('EHLO capabilities', function () {
         // replies to the commands, the greeting left out

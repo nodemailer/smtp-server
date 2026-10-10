@@ -5,7 +5,7 @@ const net = require('net');
 const tls = require('tls');
 const { Duplex } = require('stream');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
-const { chat } = require('./test-client');
+const { chat, driveSocket } = require('./test-client');
 
 const expect = chai.expect;
 
@@ -180,6 +180,35 @@ describe('Robustness', function () {
         });
     });
 
+    describe('Client that leaves during the onSecure handler', function () {
+        it('should not crash when the STARTTLS client disconnects before onSecure calls back', function (done) {
+            let server = new SMTPServer({
+                logger: false,
+                disabledCommands: ['AUTH'],
+                onSecure(socket, session, callback) {
+                    // calls back after the client is gone, the parser no longer exists then
+                    setTimeout(() => {
+                        callback();
+                        // an uncaught exception from callback() would fail the test
+                        setImmediate(() => server.close(done));
+                    }, 200);
+                }
+            });
+            server.on('error', () => false);
+            listen(server, port => {
+                let socket = net.connect(port, '127.0.0.1');
+                socket.on('error', () => false);
+                driveSocket(socket, ['EHLO client.example.com\r\n', 'STARTTLS\r\n'], true, () => {
+                    let secureSocket = tls.connect({ socket, rejectUnauthorized: false }, () => {
+                        // give the server time to finish its side of the handshake
+                        setTimeout(() => secureSocket.destroy(), 50);
+                    });
+                    secureSocket.on('error', () => false);
+                });
+            });
+        });
+    });
+
     describe('Command line length', function () {
         let server;
         let port;
@@ -187,7 +216,10 @@ describe('Robustness', function () {
         before(function (done) {
             server = new SMTPServer({
                 logger: false,
-                disabledCommands: ['AUTH', 'STARTTLS']
+                disabledCommands: ['AUTH', 'STARTTLS'],
+                // do not wait the default 30 seconds for a half-open socket left behind
+                // by the rejected line (older Bun releases never report the client FIN)
+                closeTimeout: 500
             });
             listen(server, p => {
                 port = p;

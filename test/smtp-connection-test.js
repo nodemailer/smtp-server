@@ -1464,7 +1464,7 @@ describe('SMTPServer', function () {
             // CRLF injection attempt through the authzid field
             let token = Buffer.from('attacker\r\nReceived: evil\x00\x00p').toString('base64');
             exchange(['AUTH PLAIN ' + token], function (data) {
-                expect(data).to.include('500 Error: invalid userdata');
+                expect(data).to.include('501 Error: invalid userdata');
                 // onAuth must never see the poisoned username
                 expect(lastAuth).to.equal(false);
                 done();
@@ -1474,7 +1474,7 @@ describe('SMTPServer', function () {
         it('should reject LOGIN username with control characters', function (done) {
             let username = Buffer.from('attacker\r\nReceived: evil').toString('base64');
             exchange(['AUTH LOGIN', username], function (data) {
-                expect(data).to.include('500 Error: invalid userdata');
+                expect(data).to.include('501 Error: invalid userdata');
                 expect(lastAuth).to.equal(false);
                 done();
             });
