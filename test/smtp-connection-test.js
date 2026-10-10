@@ -13,54 +13,9 @@ const pem = require('pem');
 
 const expect = chai.expect;
 const fs = require('fs');
+const { driveSocket } = require('./test-client');
 
 chai.config.includeStack = true;
-
-// a response block is complete once it ends with a final (non-continuation) line
-const FINAL_RESPONSE = /^\d{3} .*\r\n$/m;
-
-/**
- * Drives an SMTP conversation on an open socket: writes the next command after
- * every final response line, then calls back with the final line of each response
- * block and with everything the server sent.
- *
- * @param {Socket} socket Connected socket, plaintext or TLS
- * @param {String[]} commands Commands to send, each including its own CRLF
- * @param {Boolean} expectGreeting False inside a TLS session, where the server
- *     never speaks first and the client has to send the opening command
- * @param {Function} callback Called as (err, responseLines, fullText)
- */
-function driveSocket(socket, commands, expectGreeting, callback) {
-    let data = '';
-    let sent = 0;
-    let lines = [];
-    let full = '';
-
-    let onData = chunk => {
-        data += chunk.toString();
-        if (!FINAL_RESPONSE.test(data)) {
-            // still waiting for the end of this response block
-            return;
-        }
-
-        full += data;
-        lines.push(data.trim().split(/\r\n/).pop());
-        data = '';
-
-        if (sent < commands.length) {
-            return socket.write(commands[sent++]);
-        }
-
-        socket.removeListener('data', onData);
-        return callback(null, lines, full);
-    };
-
-    socket.on('data', onData);
-
-    if (!expectGreeting && commands.length) {
-        socket.write(commands[sent++]);
-    }
-}
 
 describe('SMTPServer', function () {
     this.timeout(10 * 1000); // eslint-disable-line no-invalid-this
@@ -616,7 +571,7 @@ describe('SMTPServer', function () {
     describe('Plaintext server with no connection limit', function () {
         this.timeout(60 * 1000); // eslint-disable-line no-invalid-this
 
-        let PORT = 1336;
+        let PORT;
 
         let server = new SMTPServer({
             logger: false,
@@ -625,7 +580,10 @@ describe('SMTPServer', function () {
         });
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server.listen(0, '127.0.0.1', () => {
+                PORT = server.server.address().port;
+                done();
+            });
         });
 
         it('open multiple connections and close all at once', function (done) {
@@ -953,7 +911,7 @@ describe('SMTPServer', function () {
     });
 
     describe('Secure server', function () {
-        let PORT = 1336;
+        let PORT;
 
         let server = new SMTPServer({
             secure: true,
@@ -961,7 +919,10 @@ describe('SMTPServer', function () {
         });
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server.listen(0, '127.0.0.1', () => {
+                PORT = server.server.address().port;
+                done();
+            });
         });
 
         afterEach(function (done) {
@@ -989,7 +950,7 @@ describe('SMTPServer', function () {
     });
 
     describe('Secure server with upgrade', function () {
-        let PORT = 1336;
+        let PORT;
 
         let server = new SMTPServer({
             secure: true,
@@ -998,7 +959,10 @@ describe('SMTPServer', function () {
         });
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server.listen(0, '127.0.0.1', () => {
+                PORT = server.server.address().port;
+                done();
+            });
         });
 
         afterEach(function (done) {
@@ -1026,7 +990,7 @@ describe('SMTPServer', function () {
     });
 
     describe('Secure server with cert update', function () {
-        let PORT = 1336;
+        let PORT;
         let server;
 
         beforeEach(function (done) {
@@ -1042,7 +1006,10 @@ describe('SMTPServer', function () {
                     cert: keys.certificate
                 });
 
-                server.listen(PORT, '127.0.0.1', done);
+                server.listen(0, '127.0.0.1', () => {
+                    PORT = server.server.address().port;
+                    done();
+                });
             });
         });
 
@@ -2337,7 +2304,7 @@ describe('SMTPServer', function () {
 
     describe('Lenient address parsing', function () {
         it('should reject a non-compliant sender address by default', function (done) {
-            let PORT = 1336;
+            let PORT;
 
             let connection;
 
@@ -2346,7 +2313,8 @@ describe('SMTPServer', function () {
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
 
-            server.listen(PORT, '127.0.0.1', function () {
+            server.listen(0, '127.0.0.1', function () {
+                PORT = server.server.address().port;
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
@@ -2374,7 +2342,7 @@ describe('SMTPServer', function () {
         });
 
         it('should accept a non-compliant sender address in lenient mode', function (done) {
-            let PORT = 1336;
+            let PORT;
 
             let connection;
 
@@ -2389,7 +2357,8 @@ describe('SMTPServer', function () {
                 callback();
             };
 
-            server.listen(PORT, '127.0.0.1', function () {
+            server.listen(0, '127.0.0.1', function () {
+                PORT = server.server.address().port;
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
@@ -2421,7 +2390,7 @@ describe('SMTPServer', function () {
     describe('SMTPUTF8', function () {
         it('should allow addresses with UTF-8 characters', function (done) {
             let utf8Address = 'δοκιμή@παράδειγμα.δοκιμή';
-            let PORT = 1336;
+            let PORT;
 
             let connection;
 
@@ -2435,7 +2404,8 @@ describe('SMTPServer', function () {
                 callback();
             };
 
-            server.listen(PORT, '127.0.0.1', function () {
+            server.listen(0, '127.0.0.1', function () {
+                PORT = server.server.address().port;
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
@@ -2466,7 +2436,7 @@ describe('SMTPServer', function () {
 
     describe('#onData', function () {
         it('should accept a prematurely called continue callback', function (done) {
-            let PORT = 1336;
+            let PORT;
 
             let connection;
 
@@ -2481,7 +2451,8 @@ describe('SMTPServer', function () {
                 callback();
             };
 
-            server.listen(PORT, '127.0.0.1', function () {
+            server.listen(0, '127.0.0.1', function () {
+                PORT = server.server.address().port;
                 connection = new Client({
                     port: PORT,
                     host: '127.0.0.1'
@@ -2509,7 +2480,7 @@ describe('SMTPServer', function () {
     });
 
     describe('PROXY server', function () {
-        let PORT = 1336;
+        let PORT;
 
         let server = new SMTPServer({
             maxClients: 5,
@@ -2526,7 +2497,10 @@ describe('SMTPServer', function () {
         });
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server.listen(0, '127.0.0.1', () => {
+                PORT = server.server.address().port;
+                done();
+            });
         });
 
         afterEach(function (done) {
@@ -2743,7 +2717,7 @@ describe('SMTPServer', function () {
     });
 
     describe('Secure PROXY server', function () {
-        let PORT = 1336;
+        let PORT;
 
         let server = new SMTPServer({
             maxClients: 5,
@@ -2761,7 +2735,10 @@ describe('SMTPServer', function () {
         });
 
         beforeEach(function (done) {
-            server.listen(PORT, '127.0.0.1', done);
+            server.listen(0, '127.0.0.1', () => {
+                PORT = server.server.address().port;
+                done();
+            });
         });
 
         afterEach(function (done) {
@@ -2802,7 +2779,7 @@ describe('SMTPServer', function () {
     });
 
     describe('onClose handler', function () {
-        let PORT = 1336;
+        let PORT;
 
         it('should detect once a connection is closed', function (done) {
             let closed = 0;
@@ -2818,7 +2795,8 @@ describe('SMTPServer', function () {
                 }
             });
 
-            server.listen(PORT, '127.0.0.1', function () {
+            server.listen(0, '127.0.0.1', function () {
+                PORT = server.server.address().port;
                 let createConnection = function () {
                     let connection = new Client({
                         port: PORT,
@@ -2838,7 +2816,7 @@ describe('SMTPServer', function () {
     });
 
     describe('onSecure handler', function () {
-        let PORT = 1336;
+        let PORT;
 
         it('should detect once a connection is established with TLS', function (done) {
             let server;
@@ -2863,30 +2841,32 @@ describe('SMTPServer', function () {
                     }
                 });
 
-                server.listen(PORT, '127.0.0.1');
+                server.listen(0, '127.0.0.1', () => {
+                    PORT = server.server.address().port;
 
-                let connection = new Client({
-                    port: PORT,
-                    host: '127.0.0.1',
-                    secure: true,
-                    tls: {
-                        rejectUnauthorized: false,
-                        servername: 'teretere1'
-                    }
-                });
+                    let connection = new Client({
+                        port: PORT,
+                        host: '127.0.0.1',
+                        secure: true,
+                        tls: {
+                            rejectUnauthorized: false,
+                            servername: 'teretere1'
+                        }
+                    });
 
-                connection.connect(function () {
-                    setTimeout(() => {
-                        connection.quit();
-                        server.close(() => {
-                            expect(secureCount).to.equal(1);
-                            done();
-                        });
-                    }, 100);
-                });
+                    connection.connect(function () {
+                        setTimeout(() => {
+                            connection.quit();
+                            server.close(() => {
+                                expect(secureCount).to.equal(1);
+                                done();
+                            });
+                        }, 100);
+                    });
 
-                connection.on('error', err => {
-                    server.close(() => done(err));
+                    connection.on('error', err => {
+                        server.close(() => done(err));
+                    });
                 });
             });
         });
@@ -2917,30 +2897,32 @@ describe('SMTPServer', function () {
                     }
                 });
 
-                server.listen(PORT, '127.0.0.1');
+                server.listen(0, '127.0.0.1', () => {
+                    PORT = server.server.address().port;
 
-                let connection = new Client({
-                    port: PORT,
-                    host: '127.0.0.1',
-                    secure: false,
-                    tls: {
-                        rejectUnauthorized: false,
-                        servername: 'teretere2'
-                    }
-                });
+                    let connection = new Client({
+                        port: PORT,
+                        host: '127.0.0.1',
+                        secure: false,
+                        tls: {
+                            rejectUnauthorized: false,
+                            servername: 'teretere2'
+                        }
+                    });
 
-                connection.connect(function () {
-                    setTimeout(() => {
-                        connection.quit();
-                        server.close(() => {
-                            expect(secureCount).to.equal(1);
-                            done();
-                        });
-                    }, 100);
-                });
+                    connection.connect(function () {
+                        setTimeout(() => {
+                            connection.quit();
+                            server.close(() => {
+                                expect(secureCount).to.equal(1);
+                                done();
+                            });
+                        }, 100);
+                    });
 
-                connection.on('error', err => {
-                    server.close(() => done(err));
+                    connection.on('error', err => {
+                        server.close(() => done(err));
+                    });
                 });
             });
         });
@@ -2972,31 +2954,33 @@ describe('SMTPServer', function () {
                     }
                 });
 
-                server.listen(PORT, '127.0.0.1');
+                server.listen(0, '127.0.0.1', () => {
+                    PORT = server.server.address().port;
 
-                let connection = new Client({
-                    port: PORT,
-                    host: '127.0.0.1',
-                    secure: false,
-                    ignoreTLS: true,
-                    tls: {
-                        rejectUnauthorized: false,
-                        servername: 'teretere2'
-                    }
-                });
+                    let connection = new Client({
+                        port: PORT,
+                        host: '127.0.0.1',
+                        secure: false,
+                        ignoreTLS: true,
+                        tls: {
+                            rejectUnauthorized: false,
+                            servername: 'teretere2'
+                        }
+                    });
 
-                connection.connect(function () {
-                    setTimeout(() => {
-                        connection.quit();
-                        server.close(() => {
-                            expect(secureCount).to.equal(0);
-                            done();
-                        });
-                    }, 100);
-                });
+                    connection.connect(function () {
+                        setTimeout(() => {
+                            connection.quit();
+                            server.close(() => {
+                                expect(secureCount).to.equal(0);
+                                done();
+                            });
+                        }, 100);
+                    });
 
-                connection.on('error', err => {
-                    server.close(() => done(err));
+                    connection.on('error', err => {
+                        server.close(() => done(err));
+                    });
                 });
             });
         });

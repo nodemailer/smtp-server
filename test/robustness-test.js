@@ -7,13 +7,11 @@ const net = require('net');
 const tls = require('tls');
 const { Duplex } = require('stream');
 const SMTPServer = require('../lib/smtp-server').SMTPServer;
+const { chat } = require('./test-client');
 
 const expect = chai.expect;
 
 chai.config.includeStack = true;
-
-// a response block is complete once it ends with a final (non-continuation) line
-const FINAL_RESPONSE = /^\d{3} .*\r\n$/m;
 
 /**
  * Opens a plaintext connection, waits for the greeting and then sends each
@@ -21,35 +19,17 @@ const FINAL_RESPONSE = /^\d{3} .*\r\n$/m;
  * final line of every response block, the greeting included.
  */
 function converse(port, commands, callback) {
-    let socket = net.connect(port, '127.0.0.1');
-    let data = '';
-    let lines = [];
-    let sent = 0;
-    let finished = false;
-
-    let finish = err => {
-        if (finished) {
-            return;
-        }
-        finished = true;
-        socket.destroy();
-        callback(err, lines);
-    };
-
-    socket.on('data', chunk => {
-        data += chunk.toString();
-        if (!FINAL_RESPONSE.test(data)) {
-            return;
-        }
-        lines.push(data.trim().split(/\r\n/).pop());
-        data = '';
-        if (sent < commands.length) {
-            return socket.write(commands[sent++] + '\r\n');
-        }
-        finish();
-    });
-    socket.on('error', finish);
-    socket.on('close', () => finish());
+    // setImmediate keeps an assertion failing in the callback out of the promise chain
+    chat(port, commands).then(
+        replies =>
+            setImmediate(() =>
+                callback(
+                    null,
+                    replies.filter(Boolean).map(reply => reply.lines[reply.lines.length - 1])
+                )
+            ),
+        err => setImmediate(() => callback(err))
+    );
 }
 
 /**

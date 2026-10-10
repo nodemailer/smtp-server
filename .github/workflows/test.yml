@@ -29,6 +29,14 @@ jobs:
                   cache: npm
             - run: npm install
             - run: npm test
+              if: matrix.node != '24.x'
+            # on 24.x the suite runs once, under the coverage check
+            - name: Lint
+              if: matrix.node == '24.x'
+              run: npx grunt eslint
+            - name: Test with coverage check
+              if: matrix.node == '24.x'
+              run: npm run test:coverage
 
     # smtp-server is the test server of nodemailer, which also runs under Bun,
     # so the suite is run under the latest Bun release as well
