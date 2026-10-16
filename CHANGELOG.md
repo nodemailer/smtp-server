@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.19.23](https://github.com/nodemailer/smtp-server/compare/v3.19.22...v3.19.23) (2026-10-16)
+
+
+### Bug Fixes
+
+* bump nodemailer to 10.1.2 ([aedb210](https://github.com/nodemailer/smtp-server/commit/aedb21061d4b93838549d67fbd8ab343cf2e0f19))
+* close the STARTTLS plaintext injection race, honour client certificate options on implicit TLS and bound what a client may send ([ed5c14b](https://github.com/nodemailer/smtp-server/commit/ed5c14b6d4360cacb3cbf6a9ec8b2a601c35432b))
+
 ## [3.19.22](https://github.com/nodemailer/smtp-server/compare/v3.19.21...v3.19.22) (2026-10-14)
 
 
