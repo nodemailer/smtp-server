@@ -28,3 +28,26 @@ const server = new SMTPServer({
 ```
 
 The `sizeExceeded` flag and the `byteLength` byte counter on the data stream are updated in real time while the message is being received, so a handler that wants to stop an oversized transfer early can also check the flag from a `data` event instead of waiting for `end`.
+
+## Trusting XCLIENT and XFORWARD
+
+The `useXClient` and `useXForward` options enable the Postfix [XCLIENT](http://www.postfix.org/XCLIENT_README.html) and [XFORWARD](http://www.postfix.org/XFORWARD_README.html) commands, which let an SMTP proxy pass on the connection details (and, with `XCLIENT LOGIN`, the identity) of the client it is relaying. Anyone allowed to use them can impersonate any client address, so the commands should only be available to the proxies themselves. Set the option to `true` to allow every connecting client, or to an array of the IP addresses the proxies connect from. The address is compared with the one the connection was accepted from (the address from the PROXY protocol header when `useProxy` is used), and IPv4-mapped IPv6 addresses match their IPv4 form, so `['10.0.0.5']` also covers a client that a dual-stack listener reports as `::ffff:10.0.0.5`.
+
+```js
+const server = new SMTPServer({
+    useXClient: ['10.0.0.5', '10.0.0.6'], // only these hosts may send XCLIENT
+    useXForward: ['10.0.0.5', '10.0.0.6']
+});
+```
+
+Other clients do not see the commands in the EHLO response and get a `550` reply if they try them anyway. `useProxy` takes the same `true` or array value for the PROXY protocol header.
+
+## Limiting the number of recipients
+
+By default a mail transaction can have any number of recipients. Set `maxRecipients` to cap the count. Once the limit is reached, further `RCPT TO` commands are answered with `452 Error: too many recipients` (enhanced status code `4.5.3`) as RFC 5321 section 4.5.3.1.10 prescribes, and the client can continue to `DATA` with the recipients that were accepted. A recipient that was already accepted does not count again.
+
+```js
+const server = new SMTPServer({
+    maxRecipients: 100
+});
+```

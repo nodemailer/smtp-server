@@ -11,7 +11,7 @@ const pem = require('pem');
 
 const expect = chai.expect;
 const fs = require('fs');
-const { driveSocket } = require('./test-client');
+const { driveSocket, chat } = require('./test-client');
 
 chai.config.includeStack = true;
 
@@ -867,6 +867,30 @@ describe('SMTPServer', function () {
                                 done();
                             });
                         });
+                    });
+                });
+            });
+        });
+
+        it('should destroy a closed connection whose client keeps sending', function (done) {
+            // after QUIT the server ends its side and the client is expected to close. A
+            // client that keeps its side open and trickles bytes under the idle timeout
+            // used to hold the socket and the parser indefinitely, outside the maxClients
+            // limit since the connection no longer counted
+            let trickleServer = new SMTPServer({ logger: false, socketTimeout: 500, disabledCommands: ['AUTH', 'STARTTLS'] });
+            trickleServer.listen(0, '127.0.0.1', () => {
+                let socket = net.connect({ port: trickleServer.server.address().port, host: '127.0.0.1', allowHalfOpen: true });
+                socket.on('error', () => false); // the server resets the connection in the end
+                driveSocket(socket, ['QUIT\r\n'], true, (err, lines) => {
+                    expect(err).to.not.exist;
+                    expect(lines.pop()).to.include('221');
+                    let start = Date.now();
+                    let trickle = setInterval(() => socket.write('x'), 50);
+                    socket.once('close', () => {
+                        clearInterval(trickle);
+                        // well before a trickle-reset idle timeout could ever have fired
+                        expect(Date.now() - start).to.be.below(3000);
+                        trickleServer.close(done);
                     });
                 });
             });
@@ -1880,6 +1904,32 @@ describe('SMTPServer', function () {
                     done();
                 }
             );
+        });
+
+        it('should discard pipelined plaintext even when the handshake completes while it is still queued', function (done) {
+            // The parser yields to the event loop every hundred lines, so with enough
+            // padding behind STARTTLS the TLS handshake finishes while plaintext lines are
+            // still queued. Those used to run inside the TLS session ahead of the client's
+            // own commands, as if the TLS client had sent them (STARTTLS command injection).
+            // The payload stays below the loopback MTU so that it arrives in one segment
+            let injected = 'NOOP\r\n'.repeat(2000) + 'EHLO attacker.example.com\r\nMAIL FROM:<attacker@example.com>\r\n';
+            let senders = [];
+            server.onMailFrom = (address, session, callback) => {
+                senders.push(address.address);
+                callback();
+            };
+
+            starttls(['EHLO example.com\r\n', 'STARTTLS\r\n' + injected], ['EHLO example.com\r\n', 'QUIT\r\n'], function (err, lines, data) {
+                if (err) {
+                    return done(err);
+                }
+                // the first thing said inside TLS is the reply to the client's own EHLO,
+                // not a NOOP reply or the reply to the injected EHLO
+                expect(data).to.match(/^250-/);
+                expect(data).to.not.include('250 OK');
+                expect(senders).to.deep.equal([]);
+                done();
+            });
         });
 
         it('should not answer plaintext pipelined after STARTTLS on the raw socket', function (done) {
@@ -3094,4 +3144,287 @@ describe('SNI', function () {
             });
         });
     }
+});
+
+describe('Secure server with client certificates', function () {
+    this.timeout(10 * 1000);
+
+    let keys;
+    let clientKeys;
+
+    before(function (done) {
+        pem.createCertificate({ days: 1, selfSigned: true }, (err, serverKeys) => {
+            if (err) {
+                return done(err);
+            }
+            keys = serverKeys;
+            pem.createCertificate({ days: 1, selfSigned: true, commonName: 'client.example.com' }, (err, result) => {
+                if (err) {
+                    return done(err);
+                }
+                clientKeys = result;
+                done();
+            });
+        });
+    });
+
+    // Talks to a server that requires a client certificate, over implicit TLS or
+    // STARTTLS, and calls back with whether the server answered inside the TLS session
+    // and what its onSecure handler saw of the client certificate
+    function connect(serverOptions, tlsOptions, callback) {
+        let authorized = [];
+        let server = new SMTPServer(
+            Object.assign(
+                {
+                    logger: false,
+                    key: keys.serviceKey,
+                    cert: keys.certificate,
+                    ca: [clientKeys.certificate],
+                    requestCert: true,
+                    rejectUnauthorized: true,
+                    onSecure(socket, session, next) {
+                        authorized.push(socket.authorized);
+                        next();
+                    }
+                },
+                serverOptions
+            )
+        );
+        // a refused client certificate is reported as a server error
+        server.on('error', () => false);
+        server.listen(0, '127.0.0.1', () => {
+            let port = server.server.address().port;
+            let answered = false;
+
+            let handshake = rawSocket => {
+                let socket = tls.connect(Object.assign({ port, host: '127.0.0.1', socket: rawSocket, rejectUnauthorized: false }, tlsOptions), () => {
+                    if (rawSocket) {
+                        // inside STARTTLS the client speaks first, implicit TLS waits for the greeting
+                        socket.write('EHLO client.example.com\r\n');
+                    }
+                });
+                socket.on('data', chunk => {
+                    if (!answered && /^(220|250)[ -]/.test(chunk.toString())) {
+                        answered = true;
+                        socket.end('QUIT\r\n');
+                    }
+                });
+                socket.on('error', () => false);
+                socket.on('close', () => server.close(() => callback(null, answered, authorized)));
+            };
+
+            if (serverOptions.secure) {
+                return handshake();
+            }
+
+            let rawSocket = net.connect(port, '127.0.0.1');
+            rawSocket.on('error', () => false);
+            driveSocket(rawSocket, ['EHLO client.example.com\r\n', 'STARTTLS\r\n'], true, (err, lines) => {
+                if (err) {
+                    return server.close(() => callback(err));
+                }
+                expect(lines.pop()).to.match(/^220 /);
+                handshake(rawSocket);
+            });
+        });
+    }
+
+    for (let [label, serverOptions] of [
+        ['implicit TLS', { secure: true }],
+        ['STARTTLS', {}]
+    ]) {
+        it('should refuse a client without a certificate over ' + label, function (done) {
+            // requestCert and rejectUnauthorized used to be dropped on the way to the implicit
+            // TLS socket, so every client completed the handshake and got the greeting
+            connect(serverOptions, {}, (err, answered, authorized) => {
+                expect(err).to.not.exist;
+                expect(answered).to.equal(false);
+                expect(authorized).to.deep.equal([]);
+                done();
+            });
+        });
+
+        it('should refuse a client with an untrusted certificate over ' + label, function (done) {
+            // OpenSSL only fails the handshake for a missing certificate, an untrusted one
+            // has to be refused by the library once the handshake is done, as tls.Server does
+            connect(serverOptions, { key: keys.serviceKey, cert: keys.certificate }, (err, answered, authorized) => {
+                expect(err).to.not.exist;
+                expect(answered).to.equal(false);
+                expect(authorized).to.deep.equal([]);
+                done();
+            });
+        });
+
+        it('should admit a client with a trusted certificate over ' + label, function (done) {
+            connect(serverOptions, { key: clientKeys.serviceKey, cert: clientKeys.certificate }, (err, answered, authorized) => {
+                expect(err).to.not.exist;
+                expect(answered).to.equal(true);
+                expect(authorized).to.deep.equal([true]);
+                done();
+            });
+        });
+    }
+});
+
+describe('Command logging', function () {
+    this.timeout(10 * 1000);
+
+    // runs the commands against a server whose logger records every entry
+    function logged(commands, callback) {
+        let entries = [];
+        let record = (entry, message, ...args) => entries.push({ command: entry.command, text: [message].concat(args).join(' ') });
+        let server = new SMTPServer({
+            logger: { trace: record, debug: record, info: record, warn: record, error: record, fatal: record },
+            allowInsecureAuth: true,
+            authMethods: ['PLAIN', 'LOGIN'],
+            onAuth(auth, session, next) {
+                next(null, { user: auth.username });
+            }
+        });
+        server.listen(0, '127.0.0.1', () => {
+            chat(server.server.address().port, commands).then(
+                replies => server.close(() => callback(null, entries, replies)),
+                err => server.close(() => callback(err))
+            );
+        });
+    }
+
+    it('should redact the argument of AUTH PLAIN', function (done) {
+        let token = Buffer.from('\0testuser\0testpass').toString('base64');
+        logged(['EHLO client.example.com', 'AUTH PLAIN ' + token, 'QUIT'], (err, entries, replies) => {
+            expect(err).to.not.exist;
+            expect(replies[2].code).to.equal(235);
+            expect(JSON.stringify(entries)).to.not.include(token);
+            let lines = entries.map(entry => entry.text);
+            expect(lines).to.include('C: AUTH PLAIN /* secured */');
+            // only the credentials are hidden
+            expect(lines).to.include('C: EHLO client.example.com');
+            done();
+        });
+    });
+
+    it('should redact the continuation lines of AUTH LOGIN', function (done) {
+        let username = Buffer.from('testuser').toString('base64');
+        let password = Buffer.from('testpass').toString('base64');
+        logged(['EHLO client.example.com', 'AUTH LOGIN', username, password, 'QUIT'], (err, entries, replies) => {
+            expect(err).to.not.exist;
+            expect(replies[4].code).to.equal(235);
+            let text = JSON.stringify(entries);
+            expect(text).to.not.include(username);
+            expect(text).to.not.include(password);
+            // both continuation lines are logged as part of the AUTH exchange
+            let secured = entries.filter(entry => entry.text === 'C: /* secured */');
+            expect(secured).to.have.lengthOf(2);
+            expect(secured.map(entry => entry.command)).to.deep.equal(['AUTH', 'AUTH']);
+            expect(entries.map(entry => entry.text)).to.include('C: AUTH LOGIN');
+            done();
+        });
+    });
+});
+
+describe('PROXY peer list', function () {
+    this.timeout(10 * 1000);
+
+    it('should match the listed addresses whatever form the peer address takes', function () {
+        // a dual-stack listener reports IPv4 peers as ::ffff:a.b.c.d, and IPv6 has many spellings
+        let server = new SMTPServer({ logger: false, useProxy: ['127.0.0.1', '2001:DB8::1'] });
+        expect(server._expectsProxyHeader({ remoteAddress: '::ffff:127.0.0.1' })).to.equal(true);
+        expect(server._expectsProxyHeader({ remoteAddress: '127.0.0.1' })).to.equal(true);
+        expect(server._expectsProxyHeader({ remoteAddress: '2001:db8:0:0:0:0:0:1' })).to.equal(true);
+        expect(server._expectsProxyHeader({ remoteAddress: '::ffff:127.0.0.2' })).to.equal(false);
+        expect(server._expectsProxyHeader({ remoteAddress: '::1' })).to.equal(false);
+    });
+
+    it('should expect the PROXY header from a listed peer written as an IPv4-mapped address', function (done) {
+        let server = new SMTPServer({ logger: false, useProxy: ['::ffff:127.0.0.1'], disabledCommands: ['AUTH', 'STARTTLS'] });
+        server.listen(0, '127.0.0.1', () => {
+            let greeted = false;
+            let socket = net.connect(server.server.address().port, '127.0.0.1', () => {
+                socket.write('PROXY TCP4 198.51.100.22 203.0.113.7 35646 25\r\n');
+            });
+            let data = '';
+            socket.on('data', chunk => {
+                data += chunk.toString();
+                if (!greeted && /^220 /.test(data)) {
+                    greeted = true;
+                    let [connection] = server.connections;
+                    expect(connection.remoteAddress).to.equal('198.51.100.22');
+                    socket.end('QUIT\r\n');
+                }
+            });
+            socket.on('close', () => {
+                // without the header being expected the PROXY line is an early command, answered 421
+                expect(greeted).to.equal(true);
+                server.close(done);
+            });
+        });
+    });
+});
+
+describe('Recipient list', function () {
+    this.timeout(10 * 1000);
+
+    // a connection with a mail transaction open, RCPT handled without a socket
+    function transaction(options) {
+        let server = {
+            options: Object.assign({ disabledCommands: [], authMethods: [], hideDSN: true }, options),
+            logger: { debug() {}, info() {}, error() {} },
+            onRcptTo(address, session, callback) {
+                callback();
+            }
+        };
+        let connection = new SMTPConnection(server, {}, {});
+        connection.replies = [];
+        connection.send = (code, message) => connection.replies.push(code + ' ' + message);
+        connection._resetSession();
+        connection.session.envelope.mailFrom = { address: 'sender@example.com' };
+        return connection;
+    }
+
+    function rcpt(connection, address) {
+        connection.handler_RCPT(Buffer.from('RCPT TO:<' + address + '>'), () => false);
+    }
+
+    let addresses = connection => connection.session.envelope.rcptTo.map(rcpt => rcpt.address);
+
+    it('should replace a repeated recipient whatever its case', function () {
+        let connection = transaction();
+        rcpt(connection, 'a@example.com');
+        rcpt(connection, 'b@example.com');
+        rcpt(connection, 'A@Example.com');
+        expect(addresses(connection)).to.deep.equal(['A@Example.com', 'b@example.com']);
+    });
+
+    it('should cope with a handler that edited the list', function () {
+        let connection = transaction();
+        rcpt(connection, 'a@example.com');
+        rcpt(connection, 'b@example.com');
+        // an application that drops an accepted recipient itself
+        connection.session.envelope.rcptTo.shift();
+        rcpt(connection, 'b@example.com');
+        rcpt(connection, 'a@example.com');
+        expect(addresses(connection)).to.deep.equal(['b@example.com', 'a@example.com']);
+    });
+
+    it('should refuse recipients over maxRecipients with 452', function () {
+        let connection = transaction({ maxRecipients: 2 });
+        rcpt(connection, 'a@example.com');
+        rcpt(connection, 'b@example.com');
+        rcpt(connection, 'c@example.com');
+        rcpt(connection, 'A@example.com');
+        expect(connection.replies).to.deep.equal(['250 Accepted', '250 Accepted', '452 Error: too many recipients', '250 Accepted']);
+        expect(addresses(connection)).to.deep.equal(['A@example.com', 'b@example.com']);
+    });
+
+    it('should take a long recipient list in linear time', function () {
+        // every RCPT used to scan all recipients so far, so 20000 of them took seconds
+        let connection = transaction();
+        let start = Date.now();
+        for (let i = 0; i < 20000; i++) {
+            rcpt(connection, 'user' + i + '@example.com');
+        }
+        let elapsed = Date.now() - start;
+        expect(connection.session.envelope.rcptTo).to.have.lengthOf(20000);
+        expect(elapsed).to.be.below(1000);
+    });
 });

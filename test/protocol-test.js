@@ -1,7 +1,7 @@
 'use strict';
 
 const chai = require('chai');
-const { chat, series, withServer, withClient } = require('./test-client');
+const { chat, series, withServer, withClient, RawClient } = require('./test-client');
 
 const expect = chai.expect;
 
@@ -12,6 +12,10 @@ const ENHANCED = { disabledCommands: ['AUTH'], hideENHANCEDSTATUSCODES: false };
 const XCLIENT = { disabledCommands: ['AUTH'], useXClient: true, useXForward: true };
 const LMTP = { lmtp: true, disabledCommands: ['AUTH'] };
 const DSN = { disabledCommands: ['AUTH'], hideDSN: false };
+const LIMITED = { disabledCommands: ['AUTH'], maxRecipients: 2 };
+// trust lists for XCLIENT and XFORWARD, the test client connects from 127.0.0.1
+const XCLIENT_UNTRUSTED = { disabledCommands: ['AUTH'], useXClient: ['192.0.2.9'], useXForward: ['192.0.2.9'] };
+const XCLIENT_MAPPED = { disabledCommands: ['AUTH'], useXClient: ['::ffff:127.0.0.1'], useXForward: ['::FFFF:127.0.0.1'] };
 const AUTH = {
     authMethods: ['PLAIN', 'LOGIN'],
     allowInsecureAuth: true,
@@ -52,6 +56,12 @@ const CASES = {
         ['HELO with extra arguments', PLAIN, ['HELO client example.com'], [501]],
         ['EHLO without a hostname', PLAIN, ['EHLO'], [501]],
         ['EHLO with extra arguments', PLAIN, ['EHLO client example.com'], [501]],
+        ['HELO with a control character in the hostname', PLAIN, ['HELO client\u0001.example.com'], [501]],
+        ['HELO with an over-long hostname', PLAIN, ['HELO ' + 'a'.repeat(400)], [501]],
+        ['EHLO with a control character in the hostname', PLAIN, ['EHLO client\u0001.example.com'], [501]],
+        ['EHLO with an over-long hostname', PLAIN, ['EHLO ' + 'a'.repeat(400)], [501]],
+        ['EHLO with a hostname at the length limit', PLAIN, ['EHLO ' + 'a'.repeat(300)], [250]],
+        ['EHLO with an address literal', PLAIN, ['EHLO [192.0.2.1]'], [250]],
         ['NOOP before EHLO', PLAIN, ['NOOP'], [250]],
         ['HELP', PLAIN, ['HELP'], [214]],
         ['VRFY', PLAIN, ['VRFY user'], [252]],
@@ -156,7 +166,38 @@ const CASES = {
         ['XFORWARD with an invalid hostname', XCLIENT, ['XFORWARD NAME=bad!host.example.com'], [501]],
         ['XCLIENT with an overlong hostname', XCLIENT, ['XCLIENT NAME=' + 'a'.repeat(600) + '.example.com'], [501]],
         ['XFORWARD during a transaction', XCLIENT, ['EHLO proxy.example.com', MAIL, 'XFORWARD ADDR=192.0.2.1'], [250, 250, 503]],
-        ['XFORWARD after XCLIENT ADDR', XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'XFORWARD ADDR=192.0.2.2'], [220, 550]]
+        ['XFORWARD after XCLIENT ADDR', XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'XFORWARD ADDR=192.0.2.2'], [220, 550]],
+        ['XCLIENT from a peer outside the useXClient list', XCLIENT_UNTRUSTED, ['XCLIENT ADDR=192.0.2.1'], [550]],
+        ['XFORWARD from a peer outside the useXForward list', XCLIENT_UNTRUSTED, ['XFORWARD ADDR=192.0.2.1'], [550]],
+        ['XCLIENT from a listed peer written as an IPv4-mapped address', XCLIENT_MAPPED, ['XCLIENT ADDR=192.0.2.1'], [220]],
+        ['XFORWARD from a listed peer written as an IPv4-mapped address', XCLIENT_MAPPED, ['XFORWARD ADDR=192.0.2.1'], [250]]
+    ],
+
+    'Recipient limit': [
+        [
+            'maxRecipients refuses the recipient over the limit',
+            LIMITED,
+            ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RCPT TO:<c@example.com>'],
+            [250, 250, 250, 250, 452]
+        ],
+        [
+            'a repeated recipient does not count against maxRecipients',
+            LIMITED,
+            ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RCPT TO:<A@example.com>'],
+            [250, 250, 250, 250, 250]
+        ],
+        [
+            'RSET resets the recipient count',
+            LIMITED,
+            ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RSET', MAIL, 'RCPT TO:<c@example.com>'],
+            [250, 250, 250, 250, 250, 250, 250]
+        ],
+        [
+            'the transaction continues with the accepted recipients',
+            LIMITED,
+            ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RCPT TO:<c@example.com>', 'DATA'],
+            [250, 250, 250, 250, 452, 354]
+        ]
     ],
 
     'LMTP (RFC 2033)': [
@@ -226,6 +267,12 @@ describe('Protocol', function () {
                 '5.7.0'
             ]);
         });
+
+        it('should use 4.5.3 for a recipient over maxRecipients', async function () {
+            expect(
+                await enhancedCodes(LIMITED, ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RCPT TO:<c@example.com>'])
+            ).to.deep.equal([null, '2.1.0', '2.1.5', '2.1.5', '4.5.3']);
+        });
     });
 
     describe('Source routes', function () {
@@ -290,6 +337,16 @@ describe('Protocol', function () {
             expect(ehlo.text).to.not.match(/XCLIENT|XFORWARD/);
         });
 
+        it('should advertise XCLIENT and XFORWARD only to the peers in the trust lists', async function () {
+            let [outside] = await replies(XCLIENT_UNTRUSTED, ['EHLO client.example.com']);
+            expect(outside.text).to.not.match(/XCLIENT|XFORWARD/);
+
+            let [listed] = await replies(XCLIENT_MAPPED, ['EHLO client.example.com']);
+            expect(listed.text)
+                .to.match(/XCLIENT/)
+                .and.match(/XFORWARD/);
+        });
+
         it('should hide AUTH once authenticated', async function () {
             let [before, , after] = await replies(AUTH, ['EHLO client.example.com', 'AUTH PLAIN ' + PLAIN_TOKEN, 'EHLO client.example.com']);
             expect(before.text).to.match(/AUTH PLAIN LOGIN/);
@@ -337,6 +394,79 @@ describe('Protocol', function () {
                 session => session.remoteAddress
             );
             expect(sessions).to.deep.equal(['198.51.100.7']);
+        });
+
+        it('should refresh the session when XFORWARD follows EHLO', async function () {
+            // XFORWARD is not followed by a new EHLO, so without this the handlers of the
+            // transaction would still see the proxy
+            let sessions = await sessionsOnMail(['EHLO proxy.example.com', 'XFORWARD ADDR=192.0.2.1 PORT=2525 NAME=client.example.com', MAIL], session => ({
+                remoteAddress: session.remoteAddress,
+                remotePort: session.remotePort,
+                clientHostname: session.clientHostname,
+                xForward: Object.fromEntries(session.xForward),
+                xClient: Object.fromEntries(session.xClient)
+            }));
+            expect(sessions[0]).to.deep.include({ remoteAddress: '192.0.2.1', remotePort: 2525, clientHostname: 'client.example.com' });
+            // the address the proxy connected from is kept next to the forwarded one, in the XFORWARD map
+            expect(sessions[0].xForward).to.include({ ADDR: '192.0.2.1', 'ADDR:DEFAULT': '127.0.0.1' });
+            expect(sessions[0].xClient).to.not.have.property('ADDR:DEFAULT');
+        });
+
+        describe('XCLIENT and the authenticated identity', function () {
+            // the session user seen by onMailFrom after each command sequence
+            let usersOnMail = commands => {
+                let users = [];
+                let options = {
+                    useXClient: true,
+                    authOptional: true,
+                    allowInsecureAuth: true,
+                    onAuth(auth, session, callback) {
+                        callback(null, { user: auth.username });
+                    },
+                    onMailFrom(address, session, callback) {
+                        users.push(session.user);
+                        callback();
+                    }
+                };
+                return withServer(options, ({ port }) => chat(port, commands)).then(() => users);
+            };
+
+            it('should drop an identity the proxy authenticated as on XCLIENT ADDR', async function () {
+                // the forwarded client must not inherit the proxy's own login
+                let users = await usersOnMail([
+                    'EHLO proxy.example.com',
+                    'AUTH PLAIN ' + PLAIN_TOKEN,
+                    'XCLIENT ADDR=192.0.2.1',
+                    'EHLO client.example.com',
+                    MAIL
+                ]);
+                expect(users).to.deep.equal([false]);
+            });
+
+            it('should apply a LOGIN attribute given together with ADDR', async function () {
+                let users = await usersOnMail(['XCLIENT ADDR=192.0.2.1 LOGIN=forwarded', 'EHLO client.example.com', MAIL]);
+                expect(users).to.deep.equal(['forwarded']);
+            });
+        });
+
+        it('should match the XCLIENT trust list against the PROXY protocol address', async function () {
+            // behind a PROXY protocol load balancer the peer to trust is the one the header
+            // names, not the load balancer itself
+            let options = { disabledCommands: ['AUTH'], useProxy: true, useXClient: ['192.0.2.1'] };
+            let xclientVia = async (port, proxiedAddress) => {
+                let client = await RawClient.connect(port);
+                try {
+                    client.write('PROXY TCP4 ' + proxiedAddress + ' 203.0.113.7 35646 25\r\n');
+                    expect((await client.read()).code).to.equal(220);
+                    return (await client.command('XCLIENT ADDR=198.51.100.7')).code;
+                } finally {
+                    client.close();
+                }
+            };
+            await withServer(options, async ({ port }) => {
+                expect(await xclientVia(port, '192.0.2.1')).to.equal(220);
+                expect(await xclientVia(port, '192.0.2.2')).to.equal(550);
+            });
         });
     });
 
