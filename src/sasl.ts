@@ -1,7 +1,7 @@
-'use strict';
-
-const util = require('util');
-const crypto = require('crypto');
+import crypto from 'node:crypto';
+import util from 'node:util';
+import type { SMTPConnection } from './smtp-connection.js';
+import type { SMTPServerAuthentication, SMTPServerAuthenticationResponse, SMTPServerError } from './types.js';
 
 // Control characters have no legitimate use in usernames or command parameters.
 // They enable log and header injection in applications that embed such a value
@@ -11,8 +11,18 @@ const crypto = require('crypto');
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\x00-\x1F\x7F-\x9F]/;
 
-const SASL = (module.exports = {
-    SASL_PLAIN(args, callback) {
+type Done = () => void;
+
+/** An AUTH mechanism, called with the arguments that follow the mechanism name */
+export type SASLMechanism = (this: SMTPConnection, args: string[], callback: Done) => void;
+
+/**
+ * Authentication mechanisms. The SASL_ prefixed members implement the mechanism of
+ * the same name, the rest are the steps of the multi-line exchanges. Each one runs
+ * with the connection as `this`
+ */
+const SASL = {
+    SASL_PLAIN(this: SMTPConnection, args: string[], callback: Done): void {
         if (args.length > 1) {
             this.send(501, 'Error: syntax: AUTH PLAIN token');
             return callback();
@@ -27,7 +37,7 @@ const SASL = (module.exports = {
         SASL.PLAIN_token.call(this, false, args[0], callback);
     },
 
-    SASL_LOGIN(args, callback) {
+    SASL_LOGIN(this: SMTPConnection, args: string[], callback: Done): void {
         if (args.length > 1) {
             this.send(501, 'Error: syntax: AUTH LOGIN');
             return callback();
@@ -42,7 +52,7 @@ const SASL = (module.exports = {
         SASL.LOGIN_username.call(this, false, args[0], callback);
     },
 
-    SASL_XOAUTH2(args, callback) {
+    SASL_XOAUTH2(this: SMTPConnection, args: string[], callback: Done): void {
         if (args.length > 1) {
             this.send(501, 'Error: syntax: AUTH XOAUTH2 token');
             return callback();
@@ -57,7 +67,7 @@ const SASL = (module.exports = {
         SASL.XOAUTH2_token.call(this, false, args[0], callback);
     },
 
-    'SASL_CRAM-MD5'(args, callback) {
+    'SASL_CRAM-MD5'(this: SMTPConnection, args: string[], callback: Done): void {
         if (args.length) {
             this.send(501, 'Error: syntax: AUTH CRAM-MD5');
             return callback();
@@ -77,8 +87,8 @@ const SASL = (module.exports = {
         return callback();
     },
 
-    PLAIN_token(canAbort, token, callback) {
-        token = (token || '').toString().trim();
+    PLAIN_token(this: SMTPConnection, canAbort: boolean, rawToken: Buffer | string, callback: Done): void {
+        let token = (rawToken || '').toString().trim();
 
         if (canAbort && token === '*') {
             this.send(501, 'Authentication aborted');
@@ -114,9 +124,9 @@ const SASL = (module.exports = {
                 authcid,
                 authzid,
                 password
-            },
+            } as SMTPServerAuthentication,
             this.session,
-            (err, response) => {
+            (err: SMTPServerError | null | undefined, response?: SMTPServerAuthenticationResponse) => {
                 if (err) {
                     this._server.logger.info(
                         {
@@ -173,8 +183,8 @@ const SASL = (module.exports = {
         );
     },
 
-    LOGIN_username(canAbort, username, callback) {
-        username = (username || '').toString().trim();
+    LOGIN_username(this: SMTPConnection, canAbort: boolean, rawUsername: Buffer | string, callback: Done): void {
+        let username = (rawUsername || '').toString().trim();
 
         if (canAbort && username === '*') {
             this.send(501, 'Authentication aborted');
@@ -198,8 +208,8 @@ const SASL = (module.exports = {
         return callback();
     },
 
-    LOGIN_password(username, password, callback) {
-        password = (password || '').toString().trim();
+    LOGIN_password(this: SMTPConnection, username: string, rawPassword: Buffer | string, callback: Done): void {
+        let password = (rawPassword || '').toString().trim();
 
         if (password === '*') {
             this.send(501, 'Authentication aborted');
@@ -213,9 +223,9 @@ const SASL = (module.exports = {
                 method: 'LOGIN',
                 username,
                 password
-            },
+            } as SMTPServerAuthentication,
             this.session,
-            (err, response) => {
+            (err: SMTPServerError | null | undefined, response?: SMTPServerAuthenticationResponse) => {
                 if (err) {
                     this._server.logger.info(
                         {
@@ -272,32 +282,32 @@ const SASL = (module.exports = {
         );
     },
 
-    XOAUTH2_token(canAbort, token, callback) {
-        token = (token || '').toString().trim();
+    XOAUTH2_token(this: SMTPConnection, canAbort: boolean, rawToken: Buffer | string, callback: Done): void {
+        let token = (rawToken || '').toString().trim();
 
         if (canAbort && token === '*') {
             this.send(501, 'Authentication aborted');
             return callback();
         }
 
-        let username;
-        let accessToken;
+        let username: string | undefined;
+        let accessToken: string | undefined;
 
         // Find username and access token from the input
         Buffer.from(token, 'base64')
             .toString()
             .split('\x01')
-            .forEach(part => {
-                part = part.split('=');
-                let key = part.shift().toLowerCase();
+            .forEach(field => {
+                let part = field.split('=');
+                let key = (part.shift() as string).toLowerCase();
                 let value = part.join('=').trim();
 
                 if (key === 'user') {
                     username = value;
                 } else if (key === 'auth') {
-                    value = value.split(/\s+/);
-                    if (value.shift().toLowerCase() === 'bearer') {
-                        accessToken = value.join(' ');
+                    let words = value.split(/\s+/);
+                    if ((words.shift() as string).toLowerCase() === 'bearer') {
+                        accessToken = words.join(' ');
                     }
                 }
             });
@@ -312,9 +322,9 @@ const SASL = (module.exports = {
                 method: 'XOAUTH2',
                 username,
                 accessToken
-            },
+            } as SMTPServerAuthentication,
             this.session,
-            (err, response) => {
+            (err: SMTPServerError | null | undefined, response?: SMTPServerAuthenticationResponse) => {
                 if (err) {
                     this._server.logger.info(
                         {
@@ -372,13 +382,13 @@ const SASL = (module.exports = {
         );
     },
 
-    XOAUTH2_error(data, callback) {
+    XOAUTH2_error(this: SMTPConnection, _data: Buffer | string, callback: Done): void {
         this.send(535, 'Error: Username and Password not accepted');
         return callback();
     },
 
-    'CRAM-MD5_token'(canAbort, challenge, token, callback) {
-        token = (token || '').toString().trim();
+    'CRAM-MD5_token'(this: SMTPConnection, canAbort: boolean, challenge: string, rawToken: Buffer | string, callback: Done): void {
+        let token = (rawToken || '').toString().trim();
 
         if (canAbort && token === '*') {
             this.send(501, 'Authentication aborted');
@@ -386,7 +396,7 @@ const SASL = (module.exports = {
         }
 
         let tokenParts = Buffer.from(token, 'base64').toString().split(' ');
-        let username = tokenParts.shift();
+        let username = tokenParts.shift() as string;
         let challengeResponse = (tokenParts.shift() || '').toLowerCase();
 
         if (CONTROL_CHARS.test(username)) {
@@ -400,7 +410,7 @@ const SASL = (module.exports = {
                 username,
                 challenge,
                 challengeResponse,
-                validatePassword(password) {
+                validatePassword(password: string): boolean {
                     let hmac = crypto.createHmac('md5', password);
                     let expected = Buffer.from(hmac.update(challenge).digest('hex').toLowerCase());
                     let received = Buffer.from(challengeResponse);
@@ -409,7 +419,7 @@ const SASL = (module.exports = {
                 }
             },
             this.session,
-            (err, response) => {
+            (err: SMTPServerError | null | undefined, response?: SMTPServerAuthenticationResponse) => {
                 if (err) {
                     this._server.logger.info(
                         {
@@ -467,16 +477,16 @@ const SASL = (module.exports = {
     },
 
     // this is not a real auth but a username validation initiated by SMTP proxy
-    SASL_XCLIENT(args, callback) {
+    SASL_XCLIENT(this: SMTPConnection, args: string[], callback: (err?: Error | null) => void): void {
         const username = ((args && args[0]) || '').toString().trim();
         this._server.onAuth(
             {
                 method: 'XCLIENT',
                 username,
                 password: null
-            },
+            } as SMTPServerAuthentication,
             this.session,
-            (err, response) => {
+            (err: SMTPServerError | null | undefined, response?: SMTPServerAuthenticationResponse) => {
                 if (err) {
                     this._server.logger.info(
                         {
@@ -546,9 +556,11 @@ const SASL = (module.exports = {
                 callback();
             }
         );
-    }
-});
+    },
 
-// Not a mechanism, exposed so that the rest of the library shares one definition.
-// Mechanism lookups use the "SASL_" prefix, so this can not collide with one
-module.exports.CONTROL_CHARS = CONTROL_CHARS;
+    // Not a mechanism, exposed so that the rest of the library shares one definition.
+    // Mechanism lookups use the "SASL_" prefix, so this can not collide with one
+    CONTROL_CHARS
+};
+
+export default SASL;

@@ -1,10 +1,16 @@
-'use strict';
-
 // Shared helpers for tests that talk SMTP over a raw socket. Not a test file
-// itself, the Grunt glob only runs test/*-test.js
+// itself, the test scripts only run test/**/*-test.ts
 
-const net = require('net');
-const SMTPServer = require('../lib/smtp-server').SMTPServer;
+import net from 'node:net';
+import type { AddressInfo } from 'node:net';
+import { SMTPServer, type SMTPServerOptions } from '../src/smtp-server.js';
+
+/** A validated reply block */
+export interface Reply {
+    code: number;
+    lines: string[];
+    text: string;
+}
 
 // a complete reply block: any continuation lines followed by the final line
 const REPLY_BLOCK = /^(?:\d{3}-[^\r\n]*\r\n)*\d{3}(?: [^\r\n]*)?\r\n/;
@@ -19,8 +25,8 @@ const MAX_REPLY_LINE = 512;
  * @param {String} block Reply block as received, including the final CRLF
  * @returns {Object} Parsed reply as {code, lines, text}
  */
-function validateReply(block) {
-    let fail = message => {
+export function validateReply(block: string): Reply {
+    let fail = (message: string): never => {
         throw new Error('Invalid reply (' + message + '): ' + JSON.stringify(block));
     };
 
@@ -29,7 +35,7 @@ function validateReply(block) {
     }
 
     let lines = block.slice(0, -2).split('\r\n');
-    let code;
+    let code: string | undefined;
 
     lines.forEach((line, i) => {
         if (Buffer.byteLength(line) + 2 > MAX_REPLY_LINE) {
@@ -45,7 +51,7 @@ function validateReply(block) {
         // Reply-line = Reply-code [ SP textstring ] CRLF, continuation lines use "-"
         let match = line.match(/^([2-5][0-5]\d)(?:([ -])(.*))?$/);
         if (!match) {
-            fail('malformed line ' + i);
+            return fail('malformed line ' + i);
         }
 
         if (code && match[1] !== code) {
@@ -58,7 +64,7 @@ function validateReply(block) {
         }
 
         let enhanced = (match[3] || '').match(/^(\d)\.\d{1,3}\.\d{1,3}(?: |$)/);
-        if (enhanced && enhanced[1] !== code.charAt(0)) {
+        if (enhanced && enhanced[1] !== match[1].charAt(0)) {
             fail('enhanced status code class does not match the reply code');
         }
     });
@@ -76,18 +82,23 @@ function validateReply(block) {
  * block and with everything the server sent.
  *
  * @param {Socket} socket Connected socket, plaintext or TLS
- * @param {String[]} commands Commands to send, each including its own CRLF
+ * @param {String[]} commands Commands to send (strings or buffers), each including its own CRLF
  * @param {Boolean} expectGreeting False inside a TLS session, where the server
  *     never speaks first and the client has to send the opening command
  * @param {Function} callback Called as (err, responseLines, fullText)
  */
-function driveSocket(socket, commands, expectGreeting, callback) {
+export function driveSocket(
+    socket: net.Socket,
+    commands: (string | Buffer)[],
+    expectGreeting: boolean,
+    callback: (err: Error | null, responseLines: string[], fullText: string) => void
+): void {
     let data = '';
     let sent = 0;
-    let lines = [];
+    let lines: string[] = [];
     let full = '';
 
-    let onData = chunk => {
+    let onData = (chunk: Buffer): void => {
         data += chunk.toString();
         if (!REPLY_BLOCK.test(data)) {
             // still waiting for the end of this response block
@@ -95,11 +106,12 @@ function driveSocket(socket, commands, expectGreeting, callback) {
         }
 
         full += data;
-        lines.push(data.trim().split(/\r\n/).pop());
+        lines.push(data.trim().split(/\r\n/).pop() as string);
         data = '';
 
         if (sent < commands.length) {
-            return socket.write(commands[sent++]);
+            socket.write(commands[sent++]);
+            return;
         }
 
         socket.removeListener('data', onData);
@@ -119,32 +131,37 @@ function driveSocket(socket, commands, expectGreeting, callback) {
  * @param {Object} options SMTPServer options, logging is off unless set
  * @returns {Promise<Object>} {server, port}
  */
-function startServer(options) {
+function startServer(options?: SMTPServerOptions): Promise<{ server: SMTPServer; port: number }> {
     let server = new SMTPServer(Object.assign({ logger: false }, options));
     return new Promise((resolve, reject) => {
         server.once('error', reject);
         server.listen(0, '127.0.0.1', () => {
             server.removeListener('error', reject);
-            resolve({ server, port: server.server.address().port });
+            resolve({ server, port: (server.server.address() as AddressInfo).port });
         });
     });
 }
 
-function stopServer(server) {
-    return new Promise(resolve => server.close(resolve));
+function stopServer(server: SMTPServer): Promise<void> {
+    return new Promise(resolve => server.close(() => resolve()));
 }
 
 /**
  * A plaintext SMTP client that reads one validated reply block at a time
  */
-class RawClient {
-    constructor(socket) {
+export class RawClient {
+    socket: net.Socket;
+    buffer: string;
+    closed: boolean;
+    _waiting: { resolve: (reply: Reply | null) => void; reject: (err: Error) => void; timer: NodeJS.Timeout } | null;
+
+    constructor(socket: net.Socket) {
         this.socket = socket;
         this.buffer = '';
         this.closed = false;
         this._waiting = null;
 
-        socket.on('data', chunk => {
+        socket.on('data', (chunk: Buffer) => {
             this.buffer += chunk.toString('binary');
             this._check();
         });
@@ -155,7 +172,7 @@ class RawClient {
         });
     }
 
-    static connect(port) {
+    static connect(port: number): Promise<RawClient> {
         return new Promise((resolve, reject) => {
             let socket = net.connect(port, '127.0.0.1', () => {
                 socket.removeListener('error', reject);
@@ -165,7 +182,7 @@ class RawClient {
         });
     }
 
-    _check() {
+    _check(): void {
         if (!this._waiting) {
             return;
         }
@@ -183,7 +200,7 @@ class RawClient {
             try {
                 return resolve(validateReply(Buffer.from(match[0], 'binary').toString()));
             } catch (err) {
-                return reject(err);
+                return reject(err as Error);
             }
         }
 
@@ -200,7 +217,7 @@ class RawClient {
     /**
      * Resolves with the next reply block, or null if the connection closed instead
      */
-    read(timeout) {
+    read(timeout?: number): Promise<Reply | null> {
         return new Promise((resolve, reject) => {
             let timer = setTimeout(() => {
                 this._waiting = null;
@@ -211,7 +228,7 @@ class RawClient {
         });
     }
 
-    write(data) {
+    write(data: string | Buffer): void {
         if (!this.closed) {
             this.socket.write(data);
         }
@@ -220,12 +237,12 @@ class RawClient {
     /**
      * Sends a command (CRLF is added) and resolves with its reply
      */
-    command(line, timeout) {
+    command(line: string, timeout?: number): Promise<Reply | null> {
         this.write(line + '\r\n');
         return this.read(timeout);
     }
 
-    close() {
+    close(): void {
         this.socket.destroy();
     }
 }
@@ -238,10 +255,10 @@ class RawClient {
  * @param {Function} fn Called as fn(item, index), returns a promise
  * @returns {Promise<Array>} Results in item order
  */
-function series(items, fn) {
+export function series<T, R>(items: T[], fn: (item: T, index: number) => R | Promise<R>): Promise<R[]> {
     return items.reduce(
-        (previous, item, i) => previous.then(results => Promise.resolve(fn(item, i)).then(result => results.concat([result]))),
-        Promise.resolve([])
+        (previous: Promise<R[]>, item, i) => previous.then(results => Promise.resolve(fn(item, i)).then(result => results.concat([result]))),
+        Promise.resolve([] as R[])
     );
 }
 
@@ -254,7 +271,7 @@ function series(items, fn) {
  * @param {String[]} commands Commands without CRLF
  * @returns {Promise<Object[]>} Validated replies
  */
-async function chat(port, commands) {
+export async function chat(port: number, commands: string[]): Promise<(Reply | null)[]> {
     let client = await RawClient.connect(port);
     try {
         let greeting = await client.read();
@@ -271,7 +288,7 @@ async function chat(port, commands) {
  * @param {Object} options SMTPServer options
  * @param {Function} fn Called as fn({server, port}), returns a promise
  */
-async function withServer(options, fn) {
+export async function withServer<R>(options: SMTPServerOptions, fn: (ctx: { server: SMTPServer; port: number }) => Promise<R>): Promise<R> {
     let { server, port } = await startServer(options);
     try {
         return await fn({ server, port });
@@ -286,7 +303,7 @@ async function withServer(options, fn) {
  * @param {Object} options SMTPServer options
  * @param {Function} fn Called as fn(client, greeting, server), returns a promise
  */
-function withClient(options, fn) {
+export function withClient<R>(options: SMTPServerOptions, fn: (client: RawClient, greeting: Reply | null, server: SMTPServer) => Promise<R>): Promise<R> {
     return withServer(options, async ({ server, port }) => {
         let client = await RawClient.connect(port);
         try {
@@ -296,13 +313,3 @@ function withClient(options, fn) {
         }
     });
 }
-
-module.exports = {
-    validateReply,
-    driveSocket,
-    RawClient,
-    series,
-    chat,
-    withServer,
-    withClient
-};

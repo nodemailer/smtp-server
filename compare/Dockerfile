@@ -1,4 +1,4 @@
-# Postfix reference server for compare/compare.js. Configured to show plain
+# Postfix reference server for compare/compare.ts. Configured to show plain
 # protocol behavior: HELO required and strict RFC 5321 envelopes like
 # smtp-server, no relaying, no error sleeps or disconnects, XCLIENT and XFORWARD
 # allowed for the Docker network the comparison client connects from (so an

@@ -1,29 +1,24 @@
-'use strict';
-
-const chai = require('chai');
-const net = require('net');
-const tls = require('tls');
-const { Duplex } = require('stream');
-const SMTPServer = require('../lib/smtp-server').SMTPServer;
-const { chat, driveSocket } = require('./test-client');
-
-const expect = chai.expect;
-
-chai.config.includeStack = true;
+import { describe, it, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import net from 'node:net';
+import tls from 'node:tls';
+import { Duplex } from 'node:stream';
+import { SMTPServer } from '../src/smtp-server.js';
+import { chat, driveSocket } from './test-client.js';
 
 /**
  * Opens a plaintext connection, waits for the greeting and then sends each
  * command after the previous response block completed. Calls back with the
  * final line of every response block, the greeting included.
  */
-function converse(port, commands, callback) {
+function converse(port: number, commands: string[], callback: (err: Error | null, lines?: any) => void): void {
     // setImmediate keeps an assertion failing in the callback out of the promise chain
     chat(port, commands).then(
         replies =>
             setImmediate(() =>
                 callback(
                     null,
-                    replies.filter(Boolean).map(reply => reply.lines[reply.lines.length - 1])
+                    replies.filter(Boolean).map((reply: any) => reply.lines[reply.lines.length - 1])
                 )
             ),
         err => setImmediate(() => callback(err))
@@ -34,7 +29,7 @@ function converse(port, commands, callback) {
  * Connects and sends nothing (or only what is given). Calls back with the time
  * it took for the server to close the socket and whatever the server sent.
  */
-function idleClient(port, payload, callback) {
+function idleClient(port: number, payload: string | Buffer | false, callback: (elapsed: number, received: string) => void): void {
     let start = Date.now();
     let socket = net.connect(port, '127.0.0.1');
     let received = '';
@@ -43,7 +38,7 @@ function idleClient(port, payload, callback) {
             socket.write(payload);
         }
     });
-    socket.on('data', chunk => {
+    socket.on('data', (chunk: Buffer) => {
         received += chunk.toString();
     });
     socket.on('error', () => false);
@@ -53,9 +48,9 @@ function idleClient(port, payload, callback) {
 /**
  * Polls until the predicate holds, or calls back with an error after the timeout
  */
-function waitFor(predicate, timeout, callback) {
+function waitFor(predicate: () => boolean, timeout: number, callback: (err?: Error) => void): void {
     let deadline = Date.now() + timeout;
-    let poll = () => {
+    let poll = (): void => {
         if (predicate()) {
             return callback();
         }
@@ -67,18 +62,16 @@ function waitFor(predicate, timeout, callback) {
     poll();
 }
 
-function listen(server, done) {
-    server.listen(0, '127.0.0.1', () => done(server.server.address().port));
+function listen(server: any, done: (port: number) => void): void {
+    server.listen(0, '127.0.0.1', () => done((server.server.address() as net.AddressInfo).port));
 }
 
-describe('Robustness', function () {
-    this.timeout(10 * 1000);
+describe('Robustness', () => {
+    describe('Parameters without a value', () => {
+        let server: any;
+        let port: number;
 
-    describe('Parameters without a value', function () {
-        let server;
-        let port;
-
-        before(function (done) {
+        before((t: any, done: any) => {
             server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS'],
@@ -91,49 +84,49 @@ describe('Robustness', function () {
             });
         });
 
-        after(function (done) {
+        after((t: any, done: any) => {
             server.close(done);
         });
 
         for (let param of ['BODY', 'BODY=', 'RET', 'ENVID', 'SIZE']) {
-            it('should answer 501 to MAIL FROM with a valueless ' + param + ' and keep serving', function (done) {
-                converse(port, ['EHLO x', 'MAIL FROM:<a@b.c> ' + param, 'MAIL FROM:<a@b.c>', 'QUIT'], (err, lines) => {
-                    expect(err).to.not.exist;
-                    expect(lines[2]).to.match(/^501 /);
-                    expect(lines[3]).to.match(/^250 /);
-                    expect(lines[4]).to.match(/^221 /);
+            it('should answer 501 to MAIL FROM with a valueless ' + param + ' and keep serving', (t: any, done: any) => {
+                converse(port, ['EHLO x', 'MAIL FROM:<a@b.c> ' + param, 'MAIL FROM:<a@b.c>', 'QUIT'], (err: any, lines: any) => {
+                    assert.ifError(err);
+                    assert.match(lines[2], /^501 /);
+                    assert.match(lines[3], /^250 /);
+                    assert.match(lines[4], /^221 /);
                     done();
                 });
             });
         }
 
         for (let param of ['NOTIFY', 'ORCPT']) {
-            it('should answer 501 to RCPT TO with a valueless ' + param + ' and keep serving', function (done) {
-                converse(port, ['EHLO x', 'MAIL FROM:<a@b.c>', 'RCPT TO:<x@y.z> ' + param, 'RCPT TO:<x@y.z>', 'QUIT'], (err, lines) => {
-                    expect(err).to.not.exist;
-                    expect(lines[3]).to.match(/^501 /);
-                    expect(lines[4]).to.match(/^250 /);
-                    expect(lines[5]).to.match(/^221 /);
+            it('should answer 501 to RCPT TO with a valueless ' + param + ' and keep serving', (t: any, done: any) => {
+                converse(port, ['EHLO x', 'MAIL FROM:<a@b.c>', 'RCPT TO:<x@y.z> ' + param, 'RCPT TO:<x@y.z>', 'QUIT'], (err: any, lines: any) => {
+                    assert.ifError(err);
+                    assert.match(lines[3], /^501 /);
+                    assert.match(lines[4], /^250 /);
+                    assert.match(lines[5], /^221 /);
                     done();
                 });
             });
         }
 
-        it('should still accept valueless flags such as SMTPUTF8', function (done) {
-            converse(port, ['EHLO x', 'MAIL FROM:<a@b.c> SMTPUTF8', 'QUIT'], (err, lines) => {
-                expect(err).to.not.exist;
-                expect(lines[2]).to.match(/^250 /);
+        it('should still accept valueless flags such as SMTPUTF8', (t: any, done: any) => {
+            converse(port, ['EHLO x', 'MAIL FROM:<a@b.c> SMTPUTF8', 'QUIT'], (err: any, lines: any) => {
+                assert.ifError(err);
+                assert.match(lines[2], /^250 /);
                 done();
             });
         });
     });
 
-    describe('Command handler that throws', function () {
-        let server;
-        let port;
-        let errors = [];
+    describe('Command handler that throws', () => {
+        let server: any;
+        let port: number;
+        let errors: any[] = [];
 
-        before(function (done) {
+        before((t: any, done: any) => {
             server = new SMTPServer({
                 logger: {
                     info: () => false,
@@ -141,14 +134,14 @@ describe('Robustness', function () {
                     warn: () => false,
                     trace: () => false,
                     fatal: () => false,
-                    error: (...args) => errors.push(args)
+                    error: (...args: any[]) => errors.push(args)
                 },
                 disabledCommands: ['AUTH', 'STARTTLS'],
-                onMailFrom(address) {
+                onMailFrom(address: any, session: any, callback: any) {
                     if (address.address === 'throw@b.c') {
                         throw new Error('Handler bug');
                     }
-                    return arguments[2]();
+                    return callback();
                 }
             });
             listen(server, p => {
@@ -157,37 +150,42 @@ describe('Robustness', function () {
             });
         });
 
-        after(function (done) {
+        after((t: any, done: any) => {
             server.close(done);
         });
 
-        it('should answer 451 and keep the server and the connection up', function (done) {
-            converse(port, ['EHLO x', 'MAIL FROM:<throw@b.c>', 'MAIL FROM:<ok@b.c>', 'QUIT'], (err, lines) => {
-                expect(err).to.not.exist;
-                expect(lines[2]).to.match(/^451 /);
-                expect(lines[3]).to.match(/^250 /);
-                expect(lines[4]).to.match(/^221 /);
-                expect(errors.some(args => args.some(arg => typeof arg === 'string' && /Handler bug/.test(arg)))).to.be.true;
+        it('should answer 451 and keep the server and the connection up', (t: any, done: any) => {
+            converse(port, ['EHLO x', 'MAIL FROM:<throw@b.c>', 'MAIL FROM:<ok@b.c>', 'QUIT'], (err: any, lines: any) => {
+                assert.ifError(err);
+                assert.match(lines[2], /^451 /);
+                assert.match(lines[3], /^250 /);
+                assert.match(lines[4], /^221 /);
+                assert.strictEqual(
+                    errors.some((args: any[]) => args.some((arg: any) => typeof arg === 'string' && /Handler bug/.test(arg))),
+                    true
+                );
 
                 // a fresh connection still works
-                converse(port, ['EHLO x', 'QUIT'], (err, lines) => {
-                    expect(err).to.not.exist;
-                    expect(lines[0]).to.match(/^220 /);
-                    expect(lines[2]).to.match(/^221 /);
+                converse(port, ['EHLO x', 'QUIT'], (err: any, lines: any) => {
+                    assert.ifError(err);
+                    assert.match(lines[0], /^220 /);
+                    assert.match(lines[2], /^221 /);
                     done();
                 });
             });
         });
     });
 
-    describe('Client that leaves during the onSecure handler', function () {
-        it('should not crash when the STARTTLS client disconnects before onSecure calls back', function (done) {
+    describe('Client that leaves during the onSecure handler', () => {
+        it('should not crash when the STARTTLS client disconnects before onSecure calls back', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH'],
-                onSecure(socket, session, callback) {
+                onSecure(socket: any, session: any, callback: any) {
                     // calls back after the client is gone, the parser no longer exists then
                     setTimeout(() => {
+                        // the test continues after the callback, it is not the last step
+                        // eslint-disable-next-line callback-return
                         callback();
                         // an uncaught exception from callback() would fail the test
                         setImmediate(() => server.close(done));
@@ -209,11 +207,11 @@ describe('Robustness', function () {
         });
     });
 
-    describe('Command line length', function () {
-        let server;
-        let port;
+    describe('Command line length', () => {
+        let server: any;
+        let port: number;
 
-        before(function (done) {
+        before((t: any, done: any) => {
             server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS'],
@@ -227,15 +225,15 @@ describe('Robustness', function () {
             });
         });
 
-        after(function (done) {
+        after((t: any, done: any) => {
             server.close(done);
         });
 
-        it('should reject an over-long command line that arrives complete in one chunk', function (done) {
+        it('should reject an over-long command line that arrives complete in one chunk', (t: any, done: any) => {
             let socket = net.connect(port, '127.0.0.1');
             let received = '';
             let written = false;
-            socket.on('data', chunk => {
+            socket.on('data', (chunk: Buffer) => {
                 received += chunk.toString();
                 if (!written && /^220 /m.test(received)) {
                     written = true;
@@ -245,26 +243,26 @@ describe('Robustness', function () {
             });
             socket.on('error', () => false);
             socket.on('close', () => {
-                expect(received).to.match(/Command line too long/);
+                assert.match(received, /Command line too long/);
                 done();
             });
         });
 
-        it('should accept a line at the limit', function (done) {
-            converse(port, ['EHLO x', 'NOOP ' + 'x'.repeat(16000), 'QUIT'], (err, lines) => {
-                expect(err).to.not.exist;
-                expect(lines[2]).to.match(/^250 /);
+        it('should accept a line at the limit', (t: any, done: any) => {
+            converse(port, ['EHLO x', 'NOOP ' + 'x'.repeat(16000), 'QUIT'], (err: any, lines: any) => {
+                assert.ifError(err);
+                assert.match(lines[2], /^250 /);
                 done();
             });
         });
     });
 
-    describe('Sockets that never reach the SMTP session', function () {
+    describe('Sockets that never reach the SMTP session', () => {
         for (let [label, payload] of [
             ['never sends the header', false],
             ['sends a partial header slowly', 'PROXY TCP4 ']
-        ]) {
-            it('should drop a PROXY client that ' + label, function (done) {
+        ] as [string, string | false][]) {
+            it('should drop a PROXY client that ' + label, (t: any, done: any) => {
                 let server = new SMTPServer({
                     logger: false,
                     useProxy: true,
@@ -272,15 +270,15 @@ describe('Robustness', function () {
                 });
                 listen(server, port => {
                     idleClient(port, payload, (elapsed, received) => {
-                        expect(elapsed).to.be.below(3000);
-                        expect(received).to.equal('');
+                        assert.ok(elapsed < 3000, 'expected ' + elapsed + ' to be below 3000');
+                        assert.strictEqual(received, '');
                         server.close(done);
                     });
                 });
             });
         }
 
-        it('should drop an implicit TLS client that never completes the handshake', function (done) {
+        it('should drop an implicit TLS client that never completes the handshake', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 secure: true,
@@ -290,13 +288,13 @@ describe('Robustness', function () {
             listen(server, port => {
                 // a partial record header, the handshake can never finish
                 idleClient(port, Buffer.from([0x16, 0x03]), elapsed => {
-                    expect(elapsed).to.be.below(3000);
+                    assert.ok(elapsed < 3000, 'expected ' + elapsed + ' to be below 3000');
                     server.close(done);
                 });
             });
         });
 
-        it('should drop an implicit TLS client that trickles a handshake that never completes', function (done) {
+        it('should drop an implicit TLS client that trickles a handshake that never completes', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 secure: true,
@@ -308,7 +306,7 @@ describe('Robustness', function () {
                 let socket = net.connect(port, '127.0.0.1');
                 // a record header announcing a large ClientHello, then one byte at a
                 // time so the idle timeout of the raw socket never fires
-                let timer;
+                let timer: NodeJS.Timeout | undefined;
                 socket.on('connect', () => {
                     socket.write(Buffer.from([0x16, 0x03, 0x01, 0x40, 0x00]));
                     timer = setInterval(() => socket.write(Buffer.from([0x00])), 100);
@@ -316,13 +314,14 @@ describe('Robustness', function () {
                 socket.on('error', () => false);
                 socket.on('close', () => {
                     clearInterval(timer);
-                    expect(Date.now() - start).to.be.below(3000);
+                    let elapsed = Date.now() - start;
+                    assert.ok(elapsed < 3000, 'expected ' + elapsed + ' to be below 3000');
                     server.close(done);
                 });
             });
         });
 
-        it('should keep a working session after the PROXY header arrived', function (done) {
+        it('should keep a working session after the PROXY header arrived', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 useProxy: true,
@@ -332,30 +331,30 @@ describe('Robustness', function () {
             listen(server, port => {
                 idleClient(port, 'PROXY TCP4 198.51.100.22 203.0.113.7 35646 25\r\n', (elapsed, received) => {
                     // the session timeout (421) is what closed it, not the pre-connect guard
-                    expect(received).to.match(/^220 /);
-                    expect(received).to.match(/421 Timeout/);
+                    assert.match(received, /^220 /);
+                    assert.match(received, /421 Timeout/);
                     server.close(done);
                 });
             });
         });
 
-        it('should not guard plain sockets that go straight to the SMTP session', function (done) {
+        it('should not guard plain sockets that go straight to the SMTP session', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
-            let pendingOnAccept = [];
+            let pendingOnAccept: number[] = [];
             // runs right after the accept handler, before connect() is reached
             server.server.on('connection', () => pendingOnAccept.push(server._pendingSockets.size));
             listen(server, port => {
                 idleClient(port, 'QUIT\r\n', () => {
-                    expect(pendingOnAccept).to.deep.equal([0]);
+                    assert.deepStrictEqual(pendingOnAccept, [0]);
                     server.close(done);
                 });
             });
         });
 
-        it('should limit sockets waiting for the PROXY header to maxClients', function (done) {
+        it('should limit sockets waiting for the PROXY header to maxClients', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 useProxy: true,
@@ -363,7 +362,7 @@ describe('Robustness', function () {
                 socketTimeout: 2000
             });
             listen(server, port => {
-                let sockets = [];
+                let sockets: net.Socket[] = [];
                 let opened = 0;
                 for (let i = 0; i < 2; i++) {
                     let socket = net.connect(port, '127.0.0.1', () => {
@@ -378,7 +377,7 @@ describe('Robustness', function () {
                                     }
                                     idleClient(port, false, elapsed => {
                                         // refused at once, not after the socket timeout
-                                        expect(elapsed).to.be.below(1000);
+                                        assert.ok(elapsed < 1000, 'expected ' + elapsed + ' to be below 1000');
                                         sockets.forEach(s => s.destroy());
                                         server.close(done);
                                     });
@@ -392,7 +391,7 @@ describe('Robustness', function () {
             });
         });
 
-        it('should destroy sockets still waiting for the PROXY header on close', function (done) {
+        it('should destroy sockets still waiting for the PROXY header on close', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 useProxy: true,
@@ -404,7 +403,8 @@ describe('Robustness', function () {
                 let finish = () => {
                     if (--pending === 0) {
                         // dropped right away, not after the close or socket timeout
-                        expect(Date.now() - start).to.be.below(3000);
+                        let elapsed = Date.now() - start;
+                        assert.ok(elapsed < 3000, 'expected ' + elapsed + ' to be below 3000');
                         return done();
                     }
                 };
@@ -422,7 +422,7 @@ describe('Robustness', function () {
                 );
             });
         });
-        it('should destroy sockets in the middle of an implicit TLS handshake on close', function (done) {
+        it('should destroy sockets in the middle of an implicit TLS handshake on close', (t: any, done: any) => {
             let server = new SMTPServer({
                 logger: false,
                 secure: true,
@@ -436,7 +436,7 @@ describe('Robustness', function () {
                 // the server is stuck in the middle of the handshake
                 let wire = new Duplex({
                     read() {},
-                    write(chunk, encoding, callback) {
+                    write(chunk: any, encoding: any, callback: any) {
                         socket.write(chunk);
                         callback();
                     }
@@ -447,7 +447,8 @@ describe('Robustness', function () {
                 let pending = 2;
                 let finish = () => {
                     if (--pending === 0) {
-                        expect(Date.now() - start).to.be.below(3000);
+                        let elapsed = Date.now() - start;
+                        assert.ok(elapsed < 3000, 'expected ' + elapsed + ' to be below 3000');
                         return done();
                     }
                 };

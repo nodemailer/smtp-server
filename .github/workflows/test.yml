@@ -28,18 +28,17 @@ jobs:
                   node-version: ${{ matrix.node }}
                   cache: npm
             - run: npm install
+            - run: npm run lint
+            - run: npm run format:check
             - run: npm test
               if: matrix.node != '24.x'
-            # on 24.x the suite runs once, under the coverage check
-            - name: Lint
-              if: matrix.node == '24.x'
-              run: npx grunt eslint
+            # on 24.x the suite runs once, under c8, which enforces the thresholds in .c8rc.json
             - name: Test with coverage check
               if: matrix.node == '24.x'
               run: npm run test:coverage
 
     # smtp-server is the test server of nodemailer, which also runs under Bun,
-    # so the suite is run under the latest Bun release as well
+    # so the ES module build and the same test suite are run under the latest Bun release as well
     bun:
         runs-on: ubuntu-latest
         timeout-minutes: 10

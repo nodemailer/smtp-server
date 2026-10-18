@@ -1,12 +1,10 @@
-'use strict';
-
 // Replays the same SMTP commands against smtp-server and a Postfix reference
 // server and shows where the replies differ. This is a development aid for
 // checking what RFC compliant replies look like, not a test suite: Postfix has
 // its own policies and extensions, so a difference is a hint to check the RFC,
 // not proof that smtp-server is wrong.
 //
-// Usage: node compare/compare.js [options] compare/scenarios/*.txt
+// Usage: node --import tsx compare/compare.ts [options] compare/scenarios/*.txt
 //
 //   --help          show this text
 //   --text          compare the reply text too, not only the reply and enhanced codes
@@ -26,16 +24,48 @@
 //   !reconnect        close the connection and open a new one
 //   !server {json}    smtp-server options for this scenario (first lines only)
 
-const fs = require('fs');
-const net = require('net');
-const path = require('path');
-const { parseArgs } = require('util');
-const { SMTPServer } = require('../lib/smtp-server');
+import fs from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { AddressInfo } from 'node:net';
+import { SMTPServer } from '../src/smtp-server.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export interface Step {
+    type: 'send' | 'wait' | 'reconnect';
+    line: number;
+    label: string;
+    raw?: boolean;
+    data?: Buffer;
+    ms?: number;
+}
+
+export interface NormalizeOptions {
+    text?: boolean;
+    capabilities?: boolean;
+}
+
+interface RunOptions extends NormalizeOptions {
+    all: boolean;
+    host: string;
+    port: number;
+    timeout: number;
+    settle: number;
+}
+
+interface StepResult {
+    label: string;
+    replies: string[];
+}
 
 const HOSTNAMES = /\b(?:postfix|smtp-server)\.example\.com\b/gi;
 
 // smtp-server configured to match compare/Dockerfile as closely as possible
-const SERVER_OPTIONS = {
+const SERVER_OPTIONS: any = {
     name: 'smtp-server.example.com',
     logger: false,
     disableReverseLookup: true,
@@ -48,15 +78,15 @@ const SERVER_OPTIONS = {
     authMethods: ['PLAIN', 'LOGIN'],
     authOptional: true,
     allowInsecureAuth: true,
-    onAuth(auth, session, callback) {
+    onAuth(auth: any, session: any, callback: (err: Error | null, response?: any) => void) {
         if (auth.username === 'user' && auth.password === 'pass') {
             return callback(null, { user: auth.username });
         }
-        let err = new Error('Error: authentication failed');
+        let err: any = new Error('Error: authentication failed');
         err.responseCode = 535;
         callback(err);
     },
-    onData(stream, session, callback) {
+    onData(stream: any, session: any, callback: (err?: Error | null) => void) {
         stream.on('data', () => false);
         stream.on('end', () => callback());
     }
@@ -65,9 +95,9 @@ const SERVER_OPTIONS = {
 /**
  * Parses a scenario file into steps
  */
-function parseScenario(text) {
-    let steps = [];
-    let options = {};
+export function parseScenario(text: string): { steps: Step[]; options: Record<string, any> } {
+    let steps: Step[] = [];
+    let options: Record<string, any> = {};
     text.split(/\r?\n/).forEach((line, i) => {
         let number = i + 1;
         if (!line.trim() || /^\s*#/.test(line)) {
@@ -81,7 +111,7 @@ function parseScenario(text) {
                 case 'reconnect':
                     return steps.push({ type: 'reconnect', line: number, label: line });
                 case 'server':
-                    options = Object.assign(options, JSON.parse(directive[2]));
+                    options = Object.assign(options, JSON.parse(directive[2]!));
                     return;
             }
             throw new Error('Line ' + number + ': unknown directive ' + directive[1]);
@@ -92,7 +122,8 @@ function parseScenario(text) {
                 .replace(/^ /, '')
                 .replace(
                     /\\(r|n|t|x[0-9a-fA-F]{2}|\\)/g,
-                    (m, c) => ({ r: '\r', n: '\n', t: '\t', '\\': '\\' })[c] || String.fromCharCode(parseInt(c.slice(1), 16))
+                    (m: string, c: string) =>
+                        (({ r: '\r', n: '\n', t: '\t', '\\': '\\' }) as Record<string, string>)[c] || String.fromCharCode(parseInt(c.slice(1), 16))
                 );
             return steps.push({ type: 'send', raw: true, data: Buffer.from(raw, 'binary'), line: number, label: line });
         }
@@ -105,7 +136,14 @@ function parseScenario(text) {
  * A connection that collects complete reply blocks
  */
 class Session {
-    constructor(socket) {
+    socket: net.Socket;
+    buffer: string;
+    replies: string[];
+    closed: boolean;
+    reportedClose: boolean;
+    onChange: () => unknown;
+
+    constructor(socket: net.Socket) {
         this.socket = socket;
         this.buffer = '';
         this.replies = [];
@@ -115,7 +153,7 @@ class Session {
 
         socket.on('data', chunk => {
             this.buffer += chunk.toString('binary');
-            let match;
+            let match: RegExpMatchArray | null;
             while ((match = this.buffer.match(/^(?:\d{3}-[^\n]*\n)*\d{3}(?: [^\n]*)?\r?\n/))) {
                 this.replies.push(
                     Buffer.from(match[0], 'binary')
@@ -133,7 +171,7 @@ class Session {
         });
     }
 
-    static connect(host, port) {
+    static connect(host: string, port: number): Promise<Session> {
         return new Promise((resolve, reject) => {
             let socket = net.connect(port, host, () => {
                 socket.removeListener('error', reject);
@@ -147,9 +185,9 @@ class Session {
      * Resolves with the replies that arrive until the connection is quiet for
      * `settle` ms after at least one reply, or until `timeout` without any
      */
-    collect(timeout, settle) {
+    collect(timeout: number, settle: number): Promise<string[]> {
         return new Promise(resolve => {
-            let timer;
+            let timer: NodeJS.Timeout | undefined;
             let finish = () => {
                 clearTimeout(timer);
                 this.onChange = () => false;
@@ -178,12 +216,12 @@ class Session {
 /**
  * Runs all steps against one server, resolves with the replies of every step
  */
-async function runTarget(host, port, steps, options) {
+async function runTarget(host: string, port: number, steps: Step[], options: RunOptions): Promise<StepResult[]> {
     let session = await Session.connect(host, port);
-    let results = [{ label: '(greeting)', replies: await session.collect(options.timeout, options.settle) }];
+    let results: StepResult[] = [{ label: '(greeting)', replies: await session.collect(options.timeout, options.settle) }];
 
     for (let step of steps) {
-        let replies = [];
+        let replies: string[] = [];
         switch (step.type) {
             case 'wait':
                 await new Promise(resolve => setTimeout(resolve, step.ms));
@@ -195,7 +233,7 @@ async function runTarget(host, port, steps, options) {
                 break;
             case 'send':
                 if (!session.closed) {
-                    session.socket.write(step.data);
+                    session.socket.write(step.data!);
                 }
                 // a raw step may legitimately get no reply (message content)
                 replies = await session.collect(step.raw ? options.settle * 2 : options.timeout, options.settle);
@@ -213,12 +251,12 @@ async function runTarget(host, port, steps, options) {
  * of every line, plus the text if requested. EHLO capabilities are compared as
  * a sorted list since their order is not significant.
  */
-function normalizeReply(reply, options) {
+export function normalizeReply(reply: string, options: NormalizeOptions): string {
     if (reply.startsWith('(')) {
         return reply;
     }
     let lines = reply.split(/\r?\n/);
-    let code = lines[0].slice(0, 3);
+    let code = lines[0]!.slice(0, 3);
     if (lines.length > 1 && code === '250') {
         if (!options.capabilities) {
             return code + ' [capabilities]';
@@ -231,45 +269,45 @@ function normalizeReply(reply, options) {
     }
     return lines
         .map(line => {
-            let match = line.match(/^(\d{3})[ -]?(\d\.\d{1,3}\.\d{1,3})?\s*(.*)$/);
-            let parts = [match[1]];
+            let match = line.match(/^(\d{3})[ -]?(\d\.\d{1,3}\.\d{1,3})?\s*(.*)$/)!;
+            let parts = [match[1]!];
             if (match[2]) {
                 parts.push(match[2]);
             }
             if (options.text) {
-                parts.push(match[3].replace(HOSTNAMES, 'HOST'));
+                parts.push(match[3]!.replace(HOSTNAMES, 'HOST'));
             }
             return parts.join(' ');
         })
         .join(' | ');
 }
 
-async function compareScenario(file, options) {
+async function compareScenario(file: string, options: RunOptions): Promise<{ output: string[]; differences: number }> {
     let { steps, options: serverOptions } = parseScenario(fs.readFileSync(file, 'utf-8'));
 
     let server = new SMTPServer(Object.assign({}, SERVER_OPTIONS, serverOptions));
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
 
-    let ours;
-    let theirs;
+    let ours: StepResult[];
+    let theirs: StepResult[];
     try {
         [ours, theirs] = await Promise.all([
-            runTarget('127.0.0.1', server.server.address().port, steps, options),
+            runTarget('127.0.0.1', (server.server.address() as AddressInfo).port, steps, options),
             runTarget(options.host, options.port, steps, options)
         ]);
     } finally {
-        await new Promise(resolve => server.close(resolve));
+        await new Promise<void>(resolve => server.close(() => resolve()));
     }
 
     // collected and printed by the caller, scenarios run concurrently
-    let output = [];
-    let print = line => output.push(line);
+    let output: string[] = [];
+    let print = (line: string) => output.push(line);
 
     print('== ' + path.relative(process.cwd(), file));
     let differences = 0;
     ours.forEach((step, i) => {
         let a = step.replies.map(reply => normalizeReply(reply, options)).join(' || ') || '(no reply)';
-        let b = theirs[i].replies.map(reply => normalizeReply(reply, options)).join(' || ') || '(no reply)';
+        let b = theirs[i]!.replies.map(reply => normalizeReply(reply, options)).join(' || ') || '(no reply)';
         let label = step.label.length > 60 ? step.label.slice(0, 57) + '...' : step.label;
         if (a === b) {
             if (options.all) {
@@ -280,7 +318,7 @@ async function compareScenario(file, options) {
         differences++;
         print('  DIFF  ' + label);
         print('          smtp-server: ' + step.replies.join(' || ').replace(/\r?\n/g, ' / '));
-        print('          postfix:     ' + theirs[i].replies.join(' || ').replace(/\r?\n/g, ' / '));
+        print('          postfix:     ' + theirs[i]!.replies.join(' || ').replace(/\r?\n/g, ' / '));
     });
     print('  ' + differences + ' of ' + ours.length + ' steps differ\n');
     return { output, differences };
@@ -303,12 +341,12 @@ async function main() {
 
     if (values.help) {
         // the usage notes at the top of this file
-        let usage = fs.readFileSync(__filename, 'utf-8').match(/^\/\/ Usage:[\s\S]*?(?=\n\n)/m)[0];
+        let usage = fs.readFileSync(__filename, 'utf-8').match(/^\/\/ Usage:[\s\S]*?(?=\n\n)/m)![0];
         return console.log(usage.replace(/^\/\/ ?/gm, ''));
     }
 
     let files = positionals.length ? positionals : fs.readdirSync(path.join(__dirname, 'scenarios')).map(file => path.join(__dirname, 'scenarios', file));
-    let options = Object.assign({}, values, { port: Number(values.port), timeout: Number(values.timeout), settle: Number(values.settle) });
+    let options: RunOptions = Object.assign({}, values, { port: Number(values.port), timeout: Number(values.timeout), settle: Number(values.settle) });
 
     let results = await Promise.all(
         files
@@ -324,8 +362,8 @@ async function main() {
     console.log(total + ' difference' + (total === 1 ? '' : 's') + ' in total');
 }
 
-if (require.main === module) {
-    main().catch(err => {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    main().catch((err: any) => {
         console.error(err.message);
         if (err.code === 'ECONNREFUSED') {
             console.error('Is the reference server running? Start it with: npm run postfix:start');
@@ -333,5 +371,3 @@ if (require.main === module) {
         process.exitCode = 1;
     });
 }
-
-module.exports = { parseScenario, normalizeReply };

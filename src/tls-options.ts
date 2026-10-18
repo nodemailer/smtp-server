@@ -1,11 +1,7 @@
-'use strict';
+import crypto from 'node:crypto';
+import type tls from 'node:tls';
 
-const crypto = require('crypto');
-
-// Expose to the world
-module.exports = getTLSOptions;
-
-const tlsDefaults = {
+const tlsDefaults: tls.TlsOptions & { requestOCSP?: boolean } = {
     // pregenerated default certificates for localhost
     // obviusly, do not use in production
     key:
@@ -66,9 +62,9 @@ const tlsDefaults = {
 /**
  * Mixes existing values with the default ones.
  *
- * @param {Object} [opts] TLS options
- * @returns {Object} Object with mixed TLS values
+ * @param [opts] TLS options
+ * @returns Object with mixed TLS values
  */
-function getTLSOptions(opts) {
-    return Object.assign({}, tlsDefaults, opts || {});
+export default function getTLSOptions<T extends object = tls.TlsOptions>(opts?: T | null): tls.TlsOptions & T {
+    return Object.assign({}, tlsDefaults, opts || ({} as T));
 }

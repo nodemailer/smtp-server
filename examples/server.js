@@ -1,9 +1,8 @@
 /* eslint no-console: 0 */
 
-'use strict';
-
-// Replace '../lib/smtp-server' with 'smtp-server' when running this script outside this directory
-const SMTPServer = require('../lib/smtp-server').SMTPServer;
+// Inside this repository 'smtp-server' resolves to the package itself, run `npm run build` first.
+// CommonJS works too: const { SMTPServer } = require('smtp-server');
+import { SMTPServer } from 'smtp-server';
 
 const SERVER_PORT = 2525;
 const SERVER_HOST = false;

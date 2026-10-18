@@ -1,19 +1,15 @@
-'use strict';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { SMTPStream } from '../src/smtp-stream.js';
 
-const chai = require('chai');
-const SMTPStream = require('../lib/smtp-stream').SMTPStream;
-const expect = chai.expect;
-
-chai.config.includeStack = true;
-
-describe('SMTPStream', function () {
-    it('should emit commands', function (done) {
-        let stream = new SMTPStream();
+describe('SMTPStream', () => {
+    it('should emit commands', (t, done) => {
+        let stream: any = new SMTPStream();
 
         let expecting = [Buffer.from([0x43, 0x4d, 0x44, 0x31]), Buffer.from([0x43, 0x4d, 0x44, 0x32]), Buffer.from([0x43, 0x4d, 0x44, 0x33])];
 
-        stream.oncommand = function (cmd, cb) {
-            expect(cmd).to.deep.equal(expecting.shift());
+        stream.oncommand = (cmd: any, cb: any) => {
+            assert.deepStrictEqual(cmd, expecting.shift());
             if (cb) {
                 return cb();
             } else {
@@ -24,24 +20,24 @@ describe('SMTPStream', function () {
         stream.end('CMD1\r\nCMD2\r\nCMD3');
     });
 
-    it('should start data stream', function (done) {
-        let stream = new SMTPStream();
+    it('should start data stream', (t, done) => {
+        let stream: any = new SMTPStream();
 
         let expecting = ['DATA', 'QUIT'];
 
-        stream.oncommand = function (cmd, cb) {
+        stream.oncommand = (cmd: any, cb: any) => {
             cmd = cmd.toString();
-            expect(cmd).to.deep.equal(expecting.shift());
+            assert.deepStrictEqual(cmd, expecting.shift());
 
-            let datastream;
+            let datastream: any;
             let output = '';
             if (cmd === 'DATA') {
                 datastream = stream.startDataMode();
-                datastream.on('data', function (chunk) {
+                datastream.on('data', (chunk: Buffer) => {
                     output += chunk.toString();
                 });
-                datastream.on('end', function () {
-                    expect(output).to.equal('test1\r\n.test2\r\n.test3\r\n');
+                datastream.on('end', () => {
+                    assert.strictEqual(output, 'test1\r\n.test2\r\n.test3\r\n');
                     stream.continue();
                 });
             }
@@ -56,29 +52,29 @@ describe('SMTPStream', function () {
         stream.end('DATA\r\ntest1\r\n..test2\r\n.test3\r\n.\r\nQUIT');
     });
 
-    it('should set sizeExceeded in real time while receiving data', function (done) {
-        let stream = new SMTPStream();
+    it('should set sizeExceeded in real time while receiving data', (t, done) => {
+        let stream: any = new SMTPStream();
 
-        stream.oncommand = function (cmd, cb) {
+        stream.oncommand = (cmd: any, cb: any) => {
             cmd = cmd.toString();
 
-            let datastream;
+            let datastream: any;
             if (cmd === 'DATA') {
                 datastream = stream.startDataMode(1024); // 1kB limit
 
-                expect(datastream.sizeExceeded).to.equal(false);
-                expect(datastream.byteLength).to.equal(0);
+                assert.strictEqual(datastream.sizeExceeded, false);
+                assert.strictEqual(datastream.byteLength, 0);
 
                 let exceededDuringTransfer = false;
-                datastream.on('data', function () {
+                datastream.on('data', () => {
                     if (datastream.sizeExceeded) {
                         exceededDuringTransfer = true;
                     }
                 });
-                datastream.on('end', function () {
-                    expect(exceededDuringTransfer).to.equal(true);
-                    expect(datastream.sizeExceeded).to.equal(true);
-                    expect(datastream.byteLength).to.be.gt(1024);
+                datastream.on('end', () => {
+                    assert.strictEqual(exceededDuringTransfer, true);
+                    assert.strictEqual(datastream.sizeExceeded, true);
+                    assert.ok(datastream.byteLength > 1024, 'expected byteLength to be above 1024, got ' + datastream.byteLength);
                     stream.continue();
                 });
             }
@@ -98,14 +94,14 @@ describe('SMTPStream', function () {
         stream.end('\r\n.\r\nQUIT');
     });
 
-    it('should not overflow the stack on heavily pipelined commands', function (done) {
-        let stream = new SMTPStream();
+    it('should not overflow the stack on heavily pipelined commands', (t, done) => {
+        let stream: any = new SMTPStream();
 
         let count = 0;
         let total = 100000;
 
-        stream.oncommand = function (cmd, cb) {
-            expect(cmd.toString()).to.equal('NOOP');
+        stream.oncommand = (cmd: any, cb: any) => {
+            assert.strictEqual(cmd.toString(), 'NOOP');
             count++;
             // complete every command synchronously
             cb();
@@ -114,21 +110,21 @@ describe('SMTPStream', function () {
         stream.on('error', done);
 
         stream.on('finish', () => {
-            expect(count).to.equal(total);
+            assert.strictEqual(count, total);
             done();
         });
 
         stream.end('NOOP\r\n'.repeat(total));
     });
 
-    it('should not get stuck when a command handler throws', function () {
-        let stream = new SMTPStream();
+    it('should not get stuck when a command handler throws', () => {
+        let stream: any = new SMTPStream();
 
-        let seen = [];
+        let seen: string[] = [];
         let thrown = false;
-        let continuation;
+        let continuation: any;
 
-        stream.oncommand = function (cmd, cb) {
+        stream.oncommand = (cmd: any, cb: any) => {
             cmd = cmd.toString();
             seen.push(cmd);
             if (cmd === 'BOOM') {
@@ -146,13 +142,13 @@ describe('SMTPStream', function () {
             thrown = true;
         }
 
-        expect(thrown).to.be.true;
-        expect(seen).to.deep.equal(['BOOM']);
+        assert.strictEqual(thrown, true);
+        assert.deepStrictEqual(seen, ['BOOM']);
 
         // the parser must still accept the continuation, otherwise the connection
         // would hang until the socket times out
         continuation();
-        expect(seen).to.deep.equal(['BOOM', 'NOOP', 'QUIT']);
+        assert.deepStrictEqual(seen, ['BOOM', 'NOOP', 'QUIT']);
     });
 
     // How the payload is split across TCP segments is under the sender's control and
@@ -198,24 +194,24 @@ describe('SMTPStream', function () {
             expected: 'Subject: test\r\n\r\nHello\r\n'
         }
     ].forEach(({ title, chunks, expected }) => {
-        it('should read ' + title, function (done) {
-            let stream = new SMTPStream();
+        it('should read ' + title, (t, done) => {
+            let stream: any = new SMTPStream();
 
             let expecting = ['DATA', 'QUIT'];
 
-            stream.oncommand = function (cmd, cb) {
+            stream.oncommand = (cmd: any, cb: any) => {
                 cmd = cmd.toString();
-                expect(cmd).to.deep.equal(expecting.shift());
+                assert.deepStrictEqual(cmd, expecting.shift());
 
                 let output = '';
                 if (cmd === 'DATA') {
                     let datastream = stream.startDataMode();
-                    datastream.on('data', function (chunk) {
+                    datastream.on('data', (chunk: Buffer) => {
                         output += chunk.toString();
                     });
-                    datastream.on('end', function () {
-                        expect(output).to.equal(expected);
-                        expect(stream.dataBytes).to.equal(expected.length);
+                    datastream.on('end', () => {
+                        assert.strictEqual(output, expected);
+                        assert.strictEqual(stream.dataBytes, expected.length);
                         stream.continue();
                     });
                 }

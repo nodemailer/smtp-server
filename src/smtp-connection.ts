@@ -1,20 +1,30 @@
-'use strict';
+import crypto from 'node:crypto';
+import dns from 'node:dns';
+import { EventEmitter } from 'node:events';
+import net from 'node:net';
+import os from 'node:os';
+import tls from 'node:tls';
+import ipv6normalize from 'ipv6-normalize';
+import punycode from 'punycode.js';
+import sasl, { type SASLMechanism } from './sasl.js';
+import type { SMTPServer } from './smtp-server.js';
+import { SMTPStream } from './smtp-stream.js';
+import type {
+    SMTPServerAddress,
+    SMTPServerAddressArgs,
+    SMTPServerConnectionInfo,
+    SMTPServerDataResult,
+    SMTPServerDataStream,
+    SMTPServerEnvelopeDSN,
+    SMTPServerError,
+    SMTPServerOptions,
+    SMTPServerSession
+} from './types.js';
 
-const SMTPStream = require('./smtp-stream').SMTPStream;
-const dns = require('dns');
-const tls = require('tls');
-const net = require('net');
-const ipv6normalize = require('ipv6-normalize');
-const sasl = require('./sasl');
-const crypto = require('crypto');
-const os = require('os');
-const punycode = require('punycode.js');
-const EventEmitter = require('events');
-
-const SOCKET_TIMEOUT = 60 * 1000;
+export const SOCKET_TIMEOUT = 60 * 1000;
 
 // idle timeout for a socket, the configured value or the default
-const socketTimeout = options => (options && options.socketTimeout) || SOCKET_TIMEOUT;
+export const socketTimeout = (options?: { socketTimeout?: number | undefined } | null): number => (options && options.socketTimeout) || SOCKET_TIMEOUT;
 
 // How long a connection the server has closed (QUIT, a 421) waits for the client to
 // close its side before the socket is destroyed. Measured from close() and never
@@ -29,7 +39,39 @@ const MAX_HELO_HOSTNAME_LENGTH = 300;
 // Socket options for a TLS socket the server creates itself, copied from the server
 // options for STARTTLS and implicit TLS alike (the secure context carries the rest).
 // Without requestCert and rejectUnauthorized a client certificate is never asked for
-const TLS_SOCKET_OPTIONS = ['requestCert', 'rejectUnauthorized', 'NPNProtocols', 'session', 'requestOCSP'];
+export const TLS_SOCKET_OPTIONS = ['requestCert', 'rejectUnauthorized', 'NPNProtocols', 'session', 'requestOCSP'];
+
+/** Details attached to a TLS setup error as err.meta */
+export interface TLSErrorMeta {
+    tlsProtocol?: string | null | undefined;
+    protocol?: string | undefined;
+    stage?: string | undefined;
+    remoteAddress?: string | undefined;
+    message?: string | undefined;
+}
+
+/** An error of a TLS setup, with the properties the library adds to it */
+export interface TLSError extends Error {
+    code?: string | undefined;
+    responseCode?: number | undefined;
+    report?: boolean | undefined;
+    meta?: TLSErrorMeta | undefined;
+}
+
+/**
+ * Copies the TLS_SOCKET_OPTIONS that are set in the server options onto the options of
+ * a TLS socket the server creates itself
+ *
+ * @param options Server options
+ * @param socketOptions TLS socket options to extend
+ */
+export function copyTLSSocketOptions(options: SMTPServerOptions, socketOptions: tls.TLSSocketOptions): void {
+    TLS_SOCKET_OPTIONS.forEach(key => {
+        if (key in options) {
+            (socketOptions as Record<string, unknown>)[key] = (options as Record<string, unknown>)[key];
+        }
+    });
+}
 
 // ESMTP parameters that only make sense with a value. _parseAddressCommand stores
 // a bare keyword (or "KEY=") as boolean true, and the code that consumes these
@@ -71,7 +113,7 @@ const HOSTNAME_LABEL = /^[a-z0-9_]([a-z0-9_-]*[a-z0-9_])?$/i;
  * @param {String} hostname Hostname to check
  * @returns {Boolean} true if the value is safe to use as a hostname
  */
-function isValidHostname(hostname) {
+function isValidHostname(hostname: unknown): hostname is string {
     if (!hostname || typeof hostname !== 'string' || hostname.length > MAX_HOSTNAME_LENGTH) {
         return false;
     }
@@ -89,8 +131,8 @@ function isValidHostname(hostname) {
  * @param {String} address IP address as reported by a socket or written in an option
  * @returns {String} Normalized address
  */
-function normalizeAddress(address) {
-    address = (address || '')
+function normalizeAddress(rawAddress: string | null | undefined): string {
+    let address = (rawAddress || '')
         .toString()
         .trim()
         .replace(/^::ffff:/i, '');
@@ -110,14 +152,14 @@ function normalizeAddress(address) {
  * @param {String} address Peer address
  * @returns {Boolean} true if the peer is trusted
  */
-function isAddressAllowed(option, address) {
+export function isAddressAllowed(option: boolean | string[] | undefined, rawAddress: string | null | undefined): boolean {
     if (!option) {
         return false;
     }
     if (!Array.isArray(option) || option.includes('*')) {
         return true;
     }
-    address = normalizeAddress(address);
+    let address = normalizeAddress(rawAddress);
     return option.some(entry => normalizeAddress(entry) === address);
 }
 
@@ -130,7 +172,7 @@ function isAddressAllowed(option, address) {
  * @param {String} hostname HELO/EHLO argument
  * @returns {Boolean} true if the value can be stored
  */
-function isAcceptableHeloHostname(hostname) {
+function isAcceptableHeloHostname(hostname: string): boolean {
     return hostname.length <= MAX_HELO_HOSTNAME_LENGTH && !CONTROL_CHARS.test(hostname);
 }
 
@@ -146,21 +188,22 @@ function isAcceptableHeloHostname(hostname) {
  * @param {Object} socketOptions Options the socket was created with
  * @returns {Error|null} Verification error if the connection has to be refused
  */
-function verifyPeerCertificate(tlsSocket, socketOptions) {
+export function verifyPeerCertificate(tlsSocket: tls.TLSSocket, socketOptions: tls.TLSSocketOptions): Error | null {
     if (!socketOptions.requestCert) {
         return null;
     }
 
     // the verification result is only reachable through the handle, which is where
     // tls.Server reads it too. A runtime without it (Bun) keeps what it set itself
-    let handle = tlsSocket._handle;
+    let handle = (tlsSocket as tls.TLSSocket & { _handle?: { verifyError?: () => (Error & { code?: string }) | null } })._handle;
     if (!handle || typeof handle.verifyError !== 'function') {
         return null;
     }
 
     let verifyError = handle.verifyError();
     if (verifyError) {
-        tlsSocket.authorizationError = verifyError.code;
+        // a string code at runtime, whatever @types/node says
+        (tlsSocket as unknown as { authorizationError: string | undefined }).authorizationError = verifyError.code;
         return socketOptions.rejectUnauthorized ? verifyError : null;
     }
 
@@ -179,19 +222,23 @@ function verifyPeerCertificate(tlsSocket, socketOptions) {
  * @param {String[]} unavailableValues Values that stand for "not available"
  * @returns {Object} {params} with the accepted key/value pairs, or {error} to reject
  */
-function parseProxyParameters(parts, allowedKeys, unavailableValues) {
-    let params = new Map();
+function parseProxyParameters(
+    parts: string[],
+    allowedKeys: string[],
+    unavailableValues: string[]
+): { params: Map<string, string | false>; error?: undefined } | { params?: undefined; error: string } {
+    let params = new Map<string, string | false>();
 
     for (let part of parts) {
-        let value = part.split('=');
-        let key = (value.shift() || '').toUpperCase();
+        let values = part.split('=');
+        let key = (values.shift() || '').toUpperCase();
 
-        if (value.length !== 1 || !allowedKeys.includes(key)) {
+        if (values.length !== 1 || !allowedKeys.includes(key)) {
             return { error: 'Error: Bad command parameter syntax' };
         }
 
         // value is xtext
-        value = decodeXtext(value[0] || '');
+        let value: string | false = decodeXtext(values[0] || '');
 
         // Reject values with control characters, including CRLF sequences smuggled
         // through xtext encoding (eg. NAME=ab+0D+0Acd). These end up in SMTP
@@ -240,12 +287,12 @@ function parseProxyParameters(parts, allowedKeys, unavailableValues) {
  * @param {String} value Encoded value
  * @returns {String} Decoded value
  */
-function decodeXtext(value) {
-    return value.replace(/\+([0-9A-F]{2})/g, (match, hex) => unescape('%' + hex));
+function decodeXtext(value: string): string {
+    return value.replace(/\+([0-9A-F]{2})/g, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16)));
 }
 
 // Enhanced Status Code mappings based on RFC 3463
-const ENHANCED_STATUS_CODES = {
+const ENHANCED_STATUS_CODES: Record<number, string> = {
     // Success codes (2xx)
     200: '2.0.0', // System status, or system help reply
     211: '2.0.0', // System status, or system help reply
@@ -293,7 +340,7 @@ const ENHANCED_STATUS_CODES = {
 const SKIPPED_COMMANDS_FOR_ENHANCED_STATUS_CODES = new Set(['HELO', 'EHLO', 'LHLO']);
 
 // Context-specific enhanced status code mappings
-const CONTEXTUAL_STATUS_CODES = {
+const CONTEXTUAL_STATUS_CODES: Record<string, string> = {
     // Mail transaction specific codes
     MAIL_FROM_OK: '2.1.0', // Originator address valid
     RCPT_TO_OK: '2.1.5', // Destination address valid
@@ -326,15 +373,71 @@ const CONTEXTUAL_STATUS_CODES = {
     CONNECTION_TIMEOUT: '4.4.2' // Connection timeout
 };
 
+/** Connection details known before the SMTP session starts, eg. from a PROXY header */
+export interface SMTPConnectionOptions {
+    id?: string | undefined;
+    ignore?: boolean | undefined;
+    localAddress?: string | undefined;
+    localPort?: number | undefined;
+    remoteAddress?: string | undefined;
+    remotePort?: number | undefined;
+}
+
+/** A command handler, called with the command line and a callback that resumes parsing */
+type CommandHandler = (this: SMTPConnection, command: Buffer, callback: () => void) => void;
+
+/** Result of _parseAddressCommand */
+interface ParsedAddress extends SMTPServerAddress {
+    duplicate?: string | undefined;
+}
+
+/** A parameter validation failure of MAIL FROM */
+interface ParamError {
+    code: number;
+    message: string;
+    enhancedCode: string | null;
+}
+
 /**
  * Creates a handler for new socket
- *
- * @constructor
- * @param {Object} server Server instance
- * @param {Object} socket Socket instance
  */
-class SMTPConnection extends EventEmitter {
-    constructor(server, socket, options) {
+export class SMTPConnection extends EventEmitter {
+    id: string;
+    ignore: boolean | undefined;
+    session: SMTPServerSession;
+    secure: boolean;
+    needsUpgrade: boolean;
+    tlsOptions: tls.CipherNameAndProtocol | false;
+    localAddress: string;
+    localPort: number;
+    remoteAddress: string;
+    remotePort: number;
+    name: string;
+    clientHostname: string | false;
+    openingCommand: string | false;
+    hostNameAppearsAs: string | false;
+
+    _server: SMTPServer;
+    _socket: net.Socket | tls.TLSSocket;
+    _transactionCounter: number;
+    _ready: boolean;
+    _upgrading: boolean;
+    _nextHandler: CommandHandler | false;
+    _parser: SMTPStream | false;
+    _dataStream: SMTPServerDataStream | false | null;
+    _originalRemoteAddress: string;
+    _unauthenticatedCommands: number;
+    _maxAllowedUnauthenticatedCommands: number | false;
+    _unrecognizedCommands: number;
+    _xClient: Map<string, string | number | false>;
+    _xForward: Map<string, string | number | false>;
+    _canEmitConnection: boolean;
+    _closing: boolean;
+    _closed: boolean;
+    _closeTimer?: NodeJS.Timeout | undefined;
+    _rcptIndex: Map<string, number> = new Map();
+
+    constructor(server: SMTPServer, socket: net.Socket | tls.TLSSocket, options?: SMTPConnectionOptions | null) {
         super();
 
         options = options || {};
@@ -359,9 +462,10 @@ class SMTPConnection extends EventEmitter {
         }
 
         // session data (envelope, user etc.)
-        this.session = this.session = {
+        // the rest of the session is filled in by _resetSession() once the connection is ready
+        this.session = {
             id: this.id
-        };
+        } as SMTPServerSession;
 
         // how many messages have been processed
         this._transactionCounter = 0;
@@ -386,7 +490,7 @@ class SMTPConnection extends EventEmitter {
 
         this.needsUpgrade = !!this._server.options.needsUpgrade;
 
-        this.tlsOptions = this.secure && !this.needsUpgrade && this._socket.getCipher ? this._socket.getCipher() : false;
+        this.tlsOptions = this.secure && !this.needsUpgrade && (this._socket as tls.TLSSocket).getCipher ? (this._socket as tls.TLSSocket).getCipher() : false;
 
         // Store local and remote addresses for later usage
         this.localAddress = normalizeAddress(options.localAddress || this._socket.localAddress);
@@ -438,7 +542,7 @@ class SMTPConnection extends EventEmitter {
      * Initiates the connection. Checks connection limits and reverse resolves client hostname. The client
      * is not allowed to send anything before init has finished otherwise 'You talk too soon' error is returned
      */
-    init() {
+    init(): void {
         // Setup event handlers for the socket
         this._setListeners(() => {
             // Check that connection limit is not exceeded
@@ -453,9 +557,9 @@ class SMTPConnection extends EventEmitter {
         });
     }
 
-    connectionReady(next) {
+    connectionReady(next?: () => void): void {
         // Resolve hostname for the remote IP
-        let reverseCb = (err, hostnames) => {
+        let reverseCb = (err?: Error | null, hostnames?: string[] | false): void => {
             if (err) {
                 this._server.logger.error(
                     {
@@ -501,14 +605,14 @@ class SMTPConnection extends EventEmitter {
 
             this._resetSession();
 
-            let onSecureIfNeeded = next => {
+            let onSecureIfNeeded = (next: () => void): void => {
                 if (!this.session.secure) {
                     // no TLS
                     return next();
                 }
 
-                this.session.servername = this._socket.servername;
-                this._server.onSecure(this._socket, this.session, err => {
+                this.session.servername = (this._socket as tls.TLSSocket).servername;
+                this._server.onSecure(this._socket, this.session, (err?: Error | null) => {
                     if (err) {
                         return this._onError(err);
                     }
@@ -516,7 +620,7 @@ class SMTPConnection extends EventEmitter {
                 });
             };
 
-            this._server.onConnect(this.session, err => {
+            this._server.onConnect(this.session, (err?: SMTPServerError | null) => {
                 this._server.logger.info(
                     {
                         tnx: 'connection',
@@ -568,13 +672,13 @@ class SMTPConnection extends EventEmitter {
         reverseTimer.unref();
 
         // Helper function to handle resolver results consistently
-        const handleResolverResult = (...args) => {
+        const handleResolverResult = (err: Error | null, hostnames?: string[]): void => {
             clearTimeout(reverseTimer);
             if (greetingSent) {
                 return;
             }
             greetingSent = true;
-            reverseCb(...args);
+            reverseCb(err, hostnames);
         };
 
         try {
@@ -591,19 +695,19 @@ class SMTPConnection extends EventEmitter {
                 return;
             }
             greetingSent = true;
-            reverseCb(E);
+            reverseCb(E as Error);
         }
     }
 
     /**
      * Send data to socket
      *
-     * @param {Number} code Response code
-     * @param {String|Array} data If data is Array, send a multi-line response
-     * @param {String|Boolean} context Optional context for enhanced status codes
+     * @param code Response code
+     * @param data If data is Array, send a multi-line response
+     * @param context Optional context for enhanced status codes, false for none
      */
-    send(code, data, context) {
-        let payload;
+    send(code: number, data?: string | string[] | null, context?: string | false): void {
+        let payload: string;
         let enhancedCode = this._getEnhancedStatusCode(code, context);
 
         // A response line must never contain a control character: this method also
@@ -612,7 +716,7 @@ class SMTPConnection extends EventEmitter {
         // client provided values. Line breaks are added by this method alone, so a
         // control character reaching here can only split the response. This is a
         // backstop - untrusted values are rejected where they are parsed
-        let sanitize = line => (line === undefined || line === null ? '' : line.toString()).replace(CONTROL_CHARS_GLOBAL, ' ');
+        let sanitize = (line: unknown): string => (line === undefined || line === null ? '' : line.toString()).replace(CONTROL_CHARS_GLOBAL, ' ');
 
         if (Array.isArray(data)) {
             // Multi-line response - enhanced status code must appear on each line
@@ -627,7 +731,7 @@ class SMTPConnection extends EventEmitter {
                 .join('\r\n');
         } else {
             // Single line response
-            let parts = [code];
+            let parts: (number | string)[] = [code];
             if (enhancedCode) {
                 parts.push(enhancedCode);
             }
@@ -673,7 +777,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Sends the 220 greeting. A greeting carries no enhanced status code (RFC 2034 section 3)
      */
-    _sendGreeting() {
+    _sendGreeting(): void {
         let options = this._server.options;
         this.send(220, this.name + ' ' + (options.lmtp ? 'LMTP' : 'ESMTP') + (options.banner ? ' ' + options.banner : ''), false);
     }
@@ -681,7 +785,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Close socket
      */
-    close() {
+    close(): void {
         if (!this._socket.destroyed && this._socket.writable) {
             this._socket.end();
         }
@@ -722,14 +826,14 @@ class SMTPConnection extends EventEmitter {
      * Creates a command parser for the socket. The TLS session after STARTTLS gets a
      * new one as well, see upgrade()
      *
-     * @returns {SMTPStream} Parser wired to this connection
+     * @returns Parser wired to this connection
      */
-    _createParser() {
+    _createParser(): SMTPStream {
         let parser = new SMTPStream({
             maxCommandLength: this._server.options.maxCommandLength
         });
 
-        parser.oncommand = (...args) => this._onCommand(...args);
+        parser.oncommand = (command, callback) => this._onCommand(command, callback);
 
         parser.on('error', err => {
             // if this fires on plaintext buffered before a STARTTLS handshake then
@@ -743,18 +847,18 @@ class SMTPConnection extends EventEmitter {
     /**
      * Setup socket event handlers
      */
-    _setListeners(callback) {
+    _setListeners(callback: () => void): void {
         this._socket.on('close', hadError => this._onCloseEvent(hadError));
         this._socket.on('error', err => this._onError(err));
         this._socket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
-        this._socket.pipe(this._parser);
+        this._socket.pipe(this._parser as SMTPStream);
         if (!this.needsUpgrade) {
             return callback();
         }
         this.upgrade(() => false, callback);
     }
 
-    _onCloseEvent(hadError) {
+    _onCloseEvent(hadError?: boolean): void {
         this._server.logger.info(
             {
                 tnx: 'close',
@@ -775,7 +879,7 @@ class SMTPConnection extends EventEmitter {
      * Fired when the socket is closed
      * @event
      */
-    _onClose(/* hadError */) {
+    _onClose(): void {
         clearTimeout(this._closeTimer);
 
         if (this._parser) {
@@ -808,16 +912,18 @@ class SMTPConnection extends EventEmitter {
             'Connection closed to %s',
             this.clientHostname || this.remoteAddress
         );
-        setImmediate(() => this._server.onClose(this.session));
+        // the callback argument is a no-op, handlers written against the documented
+        // signature may call it and there is nothing to wait for
+        setImmediate(() => this._server.onClose(this.session, () => false));
     }
 
     /**
      * Fired when an error occurs with the socket
      *
      * @event
-     * @param {Error} err Error object
+     * @param err Error object
      */
-    _onError(err) {
+    _onError(err: Error & { code?: string | undefined; remoteAddress?: string | undefined }): void {
         err.remoteAddress = this.remoteAddress;
         this._server.logger.error(
             {
@@ -846,7 +952,7 @@ class SMTPConnection extends EventEmitter {
      *
      * @event
      */
-    _onTimeout() {
+    _onTimeout(): void {
         if (this._closing) {
             // We already ended the socket and the client never closed its side, stop
             // waiting for it or the half-open socket would be kept forever. Besides
@@ -861,11 +967,11 @@ class SMTPConnection extends EventEmitter {
     /**
      * Checks if a selected command is available and invokes it
      *
-     * @param {Buffer} command Single line of data from the client
-     * @param {Function} callback Callback to run once the command is processed
+     * @param command Single line of data from the client
+     * @param callback Callback to run once the command is processed
      */
-    _onCommand(command, callback) {
-        let commandName = (command || '').toString().split(' ').shift().toUpperCase();
+    _onCommand(command: Buffer, callback?: () => void): void {
+        let commandName = ((command || '').toString().split(' ').shift() as string).toUpperCase();
         let logged = this._redactCredentials(commandName, (command || '').toString());
         this._server.logger.debug(
             {
@@ -878,8 +984,8 @@ class SMTPConnection extends EventEmitter {
             logged.line
         );
 
-        let handler;
-        callback = callback || (() => false);
+        let handler: CommandHandler | undefined;
+        const done: () => void = callback || (() => false);
 
         // Anything that was buffered while the TLS handshake is running arrived in
         // plaintext and must be discarded without a response. NB! this has to be
@@ -887,7 +993,7 @@ class SMTPConnection extends EventEmitter {
         // this point is still the raw one - such a write would both leak plaintext
         // into the middle of the handshake and abort the upgrade
         if (this._upgrading) {
-            return callback();
+            return done();
         }
 
         // If server already closing then ignore commands
@@ -901,7 +1007,7 @@ class SMTPConnection extends EventEmitter {
         }
 
         // block malicious web pages that try to make SMTP calls from an AJAX request
-        if (/^(OPTIONS|GET|HEAD|POST|PUT|DELETE|TRACE|CONNECT) \/.* HTTP\/\d\.\d$/i.test(command)) {
+        if (/^(OPTIONS|GET|HEAD|POST|PUT|DELETE|TRACE|CONNECT) \/.* HTTP\/\d\.\d$/i.test(command.toString())) {
             return this.send(421, 'HTTP requests not allowed', commandName);
         }
 
@@ -923,14 +1029,15 @@ class SMTPConnection extends EventEmitter {
                     case 'HELO':
                     case 'EHLO':
                         this.send(500, 'Error: ' + commandName + ' not allowed in LMTP server', false);
-                        return setImmediate(callback);
+                        setImmediate(done);
+                        return;
                     case 'LHLO':
                         commandName = 'EHLO';
                         break;
                 }
             }
             if (this._isSupported(commandName)) {
-                handler = this['handler_' + commandName];
+                handler = this._getHandler(commandName);
             }
         }
 
@@ -942,7 +1049,8 @@ class SMTPConnection extends EventEmitter {
             }
 
             this.send(500, 'Error: command not recognized', commandName);
-            return setImmediate(callback);
+            setImmediate(done);
+            return;
         }
 
         // block users that try to fiddle around without logging in
@@ -961,7 +1069,8 @@ class SMTPConnection extends EventEmitter {
 
         if (!this.hostNameAppearsAs && commandName && ['MAIL', 'RCPT', 'DATA', 'AUTH'].includes(commandName)) {
             this.send(503, 'Error: send ' + (this._server.options.lmtp ? 'LHLO' : 'HELO/EHLO') + ' first');
-            return setImmediate(callback);
+            setImmediate(done);
+            return;
         }
 
         // Check if authentication is required
@@ -970,19 +1079,21 @@ class SMTPConnection extends EventEmitter {
                 530,
                 typeof this._server.options.authRequiredMessage === 'string' ? this._server.options.authRequiredMessage : 'Error: authentication Required'
             );
-            return setImmediate(callback);
+            setImmediate(done);
+            return;
         }
 
         // A handler bug must not escape into the socket data pipe, where it would
         // either kill the process or surface as a parser error with internal details
         let handlerDone = false;
-        let handlerCallback = (...args) => {
+        let handlerCallback = (): void => {
             handlerDone = true;
-            return callback(...args);
+            return done();
         };
         try {
             handler.call(this, command, handlerCallback);
-        } catch (err) {
+        } catch (E) {
+            let err = E as Error;
             this._server.logger.error(
                 {
                     err,
@@ -1008,11 +1119,11 @@ class SMTPConnection extends EventEmitter {
      * of an authentication exchange carry them, so those are logged the way the
      * Nodemailer client logs what it sends
      *
-     * @param {String} commandName Upper-cased command name
-     * @param {String} line Command line as received
-     * @returns {Object} {commandName, line} safe to log
+     * @param commandName Upper-cased command name
+     * @param line Command line as received
+     * @returns {commandName, line} safe to log
      */
-    _redactCredentials(commandName, line) {
+    _redactCredentials(commandName: string, line: string): { commandName: string; line: string } {
         if (this._nextHandler) {
             // a continuation line of an AUTH exchange, its first token is not a command name
             return { commandName: 'AUTH', line: '/* secured */' };
@@ -1032,14 +1143,14 @@ class SMTPConnection extends EventEmitter {
      * Rejects the command with a 501 if a parameter is given more than once or a
      * listed parameter is present without a value
      *
-     * @param {Object} parsed Result of _parseAddressCommand
-     * @param {String[]} keys Parameter names that require a value
-     * @param {Function} callback Command callback, called when the command is rejected
-     * @returns {Boolean} true if the command was rejected
+     * @param parsed Result of _parseAddressCommand
+     * @param keys Parameter names that require a value
+     * @param callback Command callback, called when the command is rejected
+     * @returns true if the command was rejected
      */
-    _rejectInvalidParams(parsed, keys, callback) {
+    _rejectInvalidParams(parsed: ParsedAddress, keys: string[], callback: () => void): boolean {
         let args = parsed.args;
-        let error;
+        let error: string | undefined;
 
         if (parsed.duplicate) {
             // a parameter can only be given once (RFC 3461 section 4 says so explicitly for DSN)
@@ -1062,29 +1173,39 @@ class SMTPConnection extends EventEmitter {
     /**
      * Checks that a command is available and is not listed in the disabled commands array
      *
-     * @param {String} command Command name
-     * @returns {Boolean} Returns true if the command can be used
+     * @param command Command name
+     * @returns Returns true if the command can be used
      */
-    _isSupported(command) {
+    _isSupported(command: string): boolean {
         command = (command || '').toString().trim().toUpperCase();
-        return !this._server.options.disabledCommands.includes(command) && typeof this['handler_' + command] === 'function';
+        return !this._server.options.disabledCommands.includes(command) && typeof this._getHandler(command) === 'function';
+    }
+
+    /**
+     * Looks up the handler method of a command
+     *
+     * @param command Upper case command name
+     * @returns The handler, if there is one
+     */
+    _getHandler(command: string): CommandHandler | undefined {
+        return (this as unknown as Record<string, CommandHandler | undefined>)['handler_' + command];
     }
 
     /**
      * Determines if enhanced status codes should be used
      * @returns {Boolean} True if enhanced status codes should be included in responses
      */
-    _useEnhancedStatusCodes() {
+    _useEnhancedStatusCodes(): boolean {
         return !this._server.options.hideENHANCEDSTATUSCODES;
     }
 
     /**
      * Gets the appropriate enhanced status code for a given SMTP response code and context
-     * @param {Number} code SMTP response code
-     * @param {String|Boolean} context Optional context for more specific status codes
-     * @returns {String} Enhanced status code or empty string if not applicable
+     * @param code SMTP response code
+     * @param context Optional context for more specific status codes
+     * @returns Enhanced status code or empty string if not applicable
      */
-    _getEnhancedStatusCode(code, context) {
+    _getEnhancedStatusCode(code: number, context?: string | false): string {
         if (context === false || !this._useEnhancedStatusCodes()) {
             return '';
         }
@@ -1131,21 +1252,21 @@ class SMTPConnection extends EventEmitter {
     /**
      * Parses commands like MAIL FROM and RCPT TO. Returns an object with the address and optional arguments.
      *
-     * @param {[type]} name Address type, eg 'mail from' or 'rcpt to'
-     * @param {[type]} command Data payload to parse
-     * @returns {Object|Boolean} Parsed address in the form of {address:, args: {}} or false if parsing failed
+     * @param rawName Address type, eg 'mail from' or 'rcpt to'
+     * @param rawCommand Data payload to parse
+     * @returns Parsed address in the form of {address:, args: {}} or false if parsing failed
      */
-    _parseAddressCommand(name, command) {
-        command = (command || '').toString();
-        name = (name || '').toString().trim().toUpperCase();
+    _parseAddressCommand(rawName: string, rawCommand: Buffer | string): ParsedAddress | false {
+        let command = (rawCommand || '').toString();
+        let name = (rawName || '').toString().trim().toUpperCase();
 
         let parts = command.split(':');
-        command = parts.shift().trim().toUpperCase();
+        command = (parts.shift() as string).trim().toUpperCase();
         parts = parts.join(':').trim().split(/\s+/);
 
-        let address = parts.shift();
-        let args = false;
-        let duplicate = false;
+        let address = parts.shift() as string;
+        let args: SMTPServerAddressArgs | false = false;
+        let duplicate: string | false = false;
         let invalid = false;
 
         if (name !== command) {
@@ -1157,13 +1278,13 @@ class SMTPConnection extends EventEmitter {
         } else {
             // RFC 5321 section 4.1.2 and appendix C: a source route ("@relay.example.com:")
             // must be accepted and should be ignored
-            address = address.substr(1, address.length - 2).replace(/^@[^\s,:@]+(?:,@[^\s,:@]+)*:/, '');
+            address = address.slice(1, -1).replace(/^@[^\s,:@]+(?:,@[^\s,:@]+)*:/, '');
         }
 
-        parts.forEach(part => {
-            part = part.split('=');
-            let key = part.shift().toUpperCase();
-            let value = part.join('=') || true;
+        parts.forEach(param => {
+            let part = param.split('=');
+            let key = (part.shift() as string).toUpperCase();
+            let value: string | true = part.join('=') || true;
 
             // Skip parameters with empty keys
             if (!key || key.trim() === '') {
@@ -1200,12 +1321,12 @@ class SMTPConnection extends EventEmitter {
             // RFC 5321 section 4.1.1.3: the domainless postmaster recipient must be accepted
         } else if (address) {
             // Validate email address format
-            address = address.split('@');
-            if (address.length !== 2 || !address[0] || !address[1]) {
+            let addressParts = address.split('@');
+            if (addressParts.length !== 2 || !addressParts[0] || !addressParts[1]) {
                 invalid = true;
             } else {
-                let localPart = address[0];
-                let domain = address[1];
+                let localPart = addressParts[0];
+                let domain = addressParts[1];
 
                 if (this._server.options.lenientAddressParsing) {
                     // Minimal validation only (pre-v3.16 behavior). Many widely deployed
@@ -1223,7 +1344,7 @@ class SMTPConnection extends EventEmitter {
                             },
                             'Failed to process punycode domain "%s". error=%s',
                             domain,
-                            E.message
+                            (E as Error).message
                         );
                         // keep the original domain if punycode conversion fails
                         address = [localPart, '@', domain].join('');
@@ -1266,11 +1387,9 @@ class SMTPConnection extends EventEmitter {
                                     // Keep original if normalization fails
                                 }
                             }
-                        } else {
+                        } else if (net.isIPv4(ipContent)) {
                             // Check for IPv4 format
-                            if (net.isIPv4(ipContent)) {
-                                isValidIP = true;
-                            }
+                            isValidIP = true;
                         }
 
                         if (!isValidIP) {
@@ -1308,7 +1427,7 @@ class SMTPConnection extends EventEmitter {
                                     },
                                     'Failed to process punycode domain "%s". error=%s',
                                     domain,
-                                    E.message
+                                    (E as Error).message
                                 );
                                 // If punycode conversion fails, treat as invalid
                                 invalid = true;
@@ -1323,7 +1442,7 @@ class SMTPConnection extends EventEmitter {
             return false;
         }
 
-        let parsed = { address, args };
+        let parsed: ParsedAddress = { address, args };
         if (duplicate) {
             // rejected by the command handler, never reaches the application
             parsed.duplicate = duplicate;
@@ -1335,7 +1454,7 @@ class SMTPConnection extends EventEmitter {
      * Resets or sets up a new session. We reuse existing session object to keep
      * application specific data.
      */
-    _resetSession() {
+    _resetSession(): void {
         let session = this.session;
 
         // reset data that might be overwritten
@@ -1343,9 +1462,11 @@ class SMTPConnection extends EventEmitter {
         session.localPort = this.localPort;
         session.remoteAddress = this.remoteAddress;
         session.remotePort = this.remotePort;
-        session.clientHostname = this.clientHostname;
-        session.openingCommand = this.openingCommand;
-        session.hostNameAppearsAs = this.hostNameAppearsAs;
+        // false until known, the public type is a string for compatibility with the
+        // earlier type declarations, see SMTPServerSession
+        session.clientHostname = this.clientHostname as string;
+        session.openingCommand = this.openingCommand as string;
+        session.hostNameAppearsAs = this.hostNameAppearsAs as string;
         session.xClient = this._xClient;
         session.xForward = this._xForward;
         session.transmissionType = this._transmissionType();
@@ -1364,11 +1485,12 @@ class SMTPConnection extends EventEmitter {
             smtpUtf8: false
         };
 
-        if (!this._server.options.hideDSN)
+        if (!this._server.options.hideDSN) {
             session.envelope.dsn = {
                 ret: null, // RET parameter from MAIL FROM (FULL or HDRS)
                 envid: null // ENVID parameter from MAIL FROM
             };
+        }
 
         session.transaction = this._transactionCounter + 1;
 
@@ -1386,9 +1508,9 @@ class SMTPConnection extends EventEmitter {
      * NB! this normalizes but does not validate - callers that can validate do so
      * before calling, as the accepted shapes differ per source.
      *
-     * @param {String} hostname Hostname to store
+     * @param hostname Hostname to store
      */
-    _setClientHostname(hostname) {
+    _setClientHostname(hostname: string | false | null | undefined): void {
         // hostnames are case insensitive, and a root terminated value is valid but
         // the trailing dot is not part of the name
         hostname = (hostname || '').toString().toLowerCase().replace(/\.$/, '');
@@ -1399,9 +1521,9 @@ class SMTPConnection extends EventEmitter {
     /**
      * Returns current transmission type
      *
-     * @return {String} Transmission type
+     * @return Transmission type
      */
-    _transmissionType() {
+    _transmissionType(): string {
         let type = this._server.options.lmtp ? 'LMTP' : 'SMTP';
 
         if (this.openingCommand === 'EHLO') {
@@ -1419,12 +1541,12 @@ class SMTPConnection extends EventEmitter {
         return type;
     }
 
-    emitConnection() {
+    emitConnection(): void {
         if (!this._canEmitConnection) {
             return;
         }
         this._canEmitConnection = false;
-        this.emit('connect', {
+        let info: SMTPServerConnectionInfo = {
             id: this.id,
             localAddress: this.localAddress,
             localPort: this.localPort,
@@ -1432,7 +1554,8 @@ class SMTPConnection extends EventEmitter {
             remotePort: this.remotePort,
             hostNameAppearsAs: this.hostNameAppearsAs,
             clientHostname: this.clientHostname
-        });
+        };
+        this.emit('connect', info);
     }
 
     // COMMAND HANDLERS
@@ -1440,7 +1563,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes EHLO. Requires valid hostname as the single argument.
      */
-    handler_EHLO(command, callback) {
+    handler_EHLO(command: Buffer, callback: () => void): void {
         let parts = command.toString().trim().split(/\s+/);
         let hostname = parts[1] || '';
 
@@ -1456,7 +1579,9 @@ class SMTPConnection extends EventEmitter {
 
         this.hostNameAppearsAs = hostname.toLowerCase();
 
-        let features = ['PIPELINING', '8BITMIME', 'SMTPUTF8', 'ENHANCEDSTATUSCODES', 'DSN'].filter(feature => !this._server.options['hide' + feature]);
+        let features = ['PIPELINING', '8BITMIME', 'SMTPUTF8', 'ENHANCEDSTATUSCODES', 'DSN'].filter(
+            feature => !(this._server.options as unknown as Record<string, unknown>)['hide' + feature]
+        );
 
         if (this._server.options.authMethods.length && this._isSupported('AUTH') && !this.session.user) {
             features.push(['AUTH'].concat(this._server.options.authMethods).join(' '));
@@ -1500,19 +1625,19 @@ class SMTPConnection extends EventEmitter {
      * the session over to the actual client, which must not be able to override its
      * own connection details after that, so both commands go away with it
      *
-     * @param {String} command Command name
-     * @param {String} option Server option that enables the command: true for every
+     * @param command Command name
+     * @param option Server option that enables the command: true for every
      *     peer, or a list of the peer addresses allowed to use it
-     * @returns {Boolean} true if the client may use the command
+     * @returns true if the client may use the command
      */
-    _proxyCommandAllowed(command, option) {
+    _proxyCommandAllowed(command: string, option: 'useXClient' | 'useXForward'): boolean {
         return !this._xClient.has('ADDR') && isAddressAllowed(this._server.options[option], this._originalRemoteAddress) && this._isSupported(command);
     }
 
     /**
      * Processes HELO. Requires valid hostname as the single argument.
      */
-    handler_HELO(command, callback) {
+    handler_HELO(command: Buffer, callback: () => void): void {
         let parts = command.toString().trim().split(/\s+/);
         let hostname = parts[1] || '';
 
@@ -1544,7 +1669,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes QUIT. Closes the connection
      */
-    handler_QUIT(command, callback) {
+    handler_QUIT(command: Buffer, callback: () => void): void {
         this.send(221, 'Bye');
         this.close();
         callback();
@@ -1553,7 +1678,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes NOOP. Does nothing but keeps the connection alive
      */
-    handler_NOOP(command, callback) {
+    handler_NOOP(command: Buffer, callback: () => void): void {
         this.send(250, 'OK');
         callback();
     }
@@ -1561,7 +1686,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes RSET. Resets user and session info
      */
-    handler_RSET(command, callback) {
+    handler_RSET(command: Buffer, callback: () => void): void {
         this._resetSession();
 
         this.send(250, 'Flushed');
@@ -1571,7 +1696,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes HELP. Responds with url to RFC
      */
-    handler_HELP(command, callback) {
+    handler_HELP(command: Buffer, callback: () => void): void {
         this.send(214, 'See https://tools.ietf.org/html/rfc5321 for details');
         callback();
     }
@@ -1579,7 +1704,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes VRFY. Does not verify anything
      */
-    handler_VRFY(command, callback) {
+    handler_VRFY(command: Buffer, callback: () => void): void {
         if (!command.toString().trim().split(/\s+/)[1]) {
             this.send(501, 'Error: Syntax: VRFY address');
             return callback();
@@ -1592,7 +1717,7 @@ class SMTPConnection extends EventEmitter {
      * Overrides connection info
      * http://www.postfix.org/XCLIENT_README.html
      */
-    handler_XCLIENT(command, callback) {
+    handler_XCLIENT(command: Buffer, callback: () => void): void {
         // check if user is authorized to perform this command
         if (!this._proxyCommandAllowed('XCLIENT', 'useXClient')) {
             this.send(550, 'Error: Not allowed', 'NOT_AUTHORIZED');
@@ -1614,24 +1739,25 @@ class SMTPConnection extends EventEmitter {
             return callback();
         }
 
-        let loginValue = false;
+        let loginValue: string | false = false;
 
         // Parse and validate every argument before applying any of them. A command
         // that is rejected halfway through would otherwise leave the connection with
         // partially updated state, eg. a spoofed remote address that also blocks any
         // further XCLIENT attempt
         let { params, error } = parseProxyParameters(parts, allowedKeys, ['[UNAVAILABLE]', '[TEMPUNAVAIL]']);
-        if (error) {
+        if (!params) {
             this.send(501, error);
             return callback();
         }
 
         // arguments are valid, apply them
-        for (let [key, value] of params) {
+        for (let [key, rawValue] of params) {
+            let value: string | number | false = rawValue;
             switch (key) {
                 // handled outside the switch
                 case 'LOGIN':
-                    loginValue = value;
+                    loginValue = rawValue;
                     break;
                 case 'ADDR':
                     if (value) {
@@ -1702,7 +1828,8 @@ class SMTPConnection extends EventEmitter {
                         this._xClient.set('PORT:DEFAULT', this.remotePort || '');
                     }
 
-                    this.remotePort = value;
+                    // NB! an unparseable value is stored as an empty string, as it always has been
+                    this.remotePort = value as number;
                     break;
                 default:
                 // other values are not relevant
@@ -1710,7 +1837,7 @@ class SMTPConnection extends EventEmitter {
             this._xClient.set(key, value);
         }
 
-        let checkLogin = done => {
+        let checkLogin = (done: () => void): void => {
             if (typeof loginValue !== 'string') {
                 return done();
             }
@@ -1763,7 +1890,7 @@ class SMTPConnection extends EventEmitter {
      * Processes XFORWARD data
      * http://www.postfix.org/XFORWARD_README.html
      */
-    handler_XFORWARD(command, callback) {
+    handler_XFORWARD(command: Buffer, callback: () => void): void {
         // check if user is authorized to perform this command
         if (!this._proxyCommandAllowed('XFORWARD', 'useXForward')) {
             this.send(550, 'Error: Not allowed', 'NOT_AUTHORIZED');
@@ -1788,13 +1915,14 @@ class SMTPConnection extends EventEmitter {
 
         // parse and validate every argument before applying any of them, see handler_XCLIENT
         let { params, error } = parseProxyParameters(parts, allowedKeys, ['[UNAVAILABLE]']);
-        if (error) {
+        if (!params) {
             this.send(501, error);
             return callback();
         }
 
         // arguments are valid, apply them
-        for (let [key, value] of params) {
+        for (let [key, rawValue] of params) {
+            let value: string | number | false = rawValue;
             switch (key) {
                 case 'ADDR':
                     if (value) {
@@ -1888,7 +2016,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Upgrades connection to TLS if possible
      */
-    handler_STARTTLS(command, callback) {
+    handler_STARTTLS(command: Buffer, callback: () => void): void {
         // RFC 3207: the STARTTLS command does not take any parameters
         if (command.toString().trim().split(/\s+/).length > 1) {
             this.send(501, 'Error: syntax: STARTTLS');
@@ -1908,15 +2036,15 @@ class SMTPConnection extends EventEmitter {
     /**
      * Check if selected authentication is available and delegate auth data to SASL
      */
-    handler_AUTH(command, callback) {
+    handler_AUTH(command: Buffer, callback: () => void): void {
         let args = command.toString().trim().split(/\s+/);
-        let method;
-        let handler;
+        let method: string;
+        let handler: ((args: string[], callback: () => void) => void) | undefined;
 
         args.shift(); // remove AUTH
         method = (args.shift() || '').toString().toUpperCase(); // get METHOD and keep additional arguments in the array
-        handler = sasl['SASL_' + method];
-        handler = handler ? handler.bind(this) : handler;
+        let mechanism = (sasl as unknown as Record<string, SASLMechanism | undefined>)['SASL_' + method];
+        handler = typeof mechanism === 'function' ? mechanism.bind(this) : undefined;
 
         if (!this.secure && this._isSupported('STARTTLS') && !this._server.options.hideSTARTTLS && !this._server.options.allowInsecureAuth) {
             this.send(538, 'Error: Must issue a STARTTLS command first');
@@ -1938,20 +2066,22 @@ class SMTPConnection extends EventEmitter {
 
     /**
      * Validates MAIL FROM parameters
-     * @param {Object} parsed - Parsed address command with args
-     * @returns {Object|null} Returns error object {code, message, enhancedCode} if validation fails, null if successful
+     * @param parsed - Parsed address command with args
+     * @returns Returns error object {code, message, enhancedCode} if validation fails, null if successful
      */
-    _validateMailParams(parsed) {
+    _validateMailParams(parsed: ParsedAddress): ParamError | null {
+        // the parameters that take a value have been checked to have one, see MAIL_VALUE_PARAMS
+        const args: Record<string, any> = parsed.args || {};
         // Validate SIZE parameter (RFC 1870): size-value ::= 1*20DIGIT
-        if (parsed.args.SIZE) {
-            if (!/^\d{1,20}$/.test(parsed.args.SIZE)) {
+        if (args.SIZE) {
+            if (!/^\d{1,20}$/.test(args.SIZE)) {
                 return {
                     code: 501,
                     message: 'Error: Bad message size syntax',
                     enhancedCode: null
                 };
             }
-            if (!this._server.options.hideSize && this._server.options.size && Number(parsed.args.SIZE) > this._server.options.size) {
+            if (!this._server.options.hideSize && this._server.options.size && Number(args.SIZE) > this._server.options.size) {
                 return {
                     code: 552,
                     message: 'Error: message exceeds fixed maximum message size ' + this._server.options.size,
@@ -1962,8 +2092,8 @@ class SMTPConnection extends EventEmitter {
 
         // Validate BODY parameter (RFC 6152 - 8BITMIME)
         // Note: BINARYMIME is not supported as it requires BDAT command (RFC 3030)
-        if (parsed.args.BODY) {
-            const bodyType = parsed.args.BODY.toLowerCase();
+        if (args.BODY) {
+            const bodyType = args.BODY.toLowerCase();
             if (bodyType !== '7bit' && bodyType !== '8bitmime') {
                 return {
                     code: 501,
@@ -1974,8 +2104,8 @@ class SMTPConnection extends EventEmitter {
         }
 
         // Validate SMTPUTF8 parameter (RFC 6531)
-        if (parsed.args.SMTPUTF8 !== undefined) {
-            if (parsed.args.SMTPUTF8 !== true) {
+        if (args.SMTPUTF8 !== undefined) {
+            if (args.SMTPUTF8 !== true) {
                 return {
                     code: 501,
                     message: 'Invalid SMTPUTF8 parameter. This flag does not accept a value',
@@ -1985,7 +2115,7 @@ class SMTPConnection extends EventEmitter {
         }
 
         // Validate REQUIRETLS parameter (RFC 8689)
-        if (parsed.args.REQUIRETLS !== undefined) {
+        if (args.REQUIRETLS !== undefined) {
             if (!this.secure) {
                 return {
                     code: 530,
@@ -1993,7 +2123,7 @@ class SMTPConnection extends EventEmitter {
                     enhancedCode: null
                 };
             }
-            if (parsed.args.REQUIRETLS !== true) {
+            if (args.REQUIRETLS !== true) {
                 return {
                     code: 501,
                     message: 'Invalid REQUIRETLS parameter. This flag does not accept a value',
@@ -2004,8 +2134,8 @@ class SMTPConnection extends EventEmitter {
 
         // Validate DSN parameters if DSN is supported
         if (!this._server.options.hideDSN) {
-            if (parsed.args.RET) {
-                const ret = parsed.args.RET.toUpperCase();
+            if (args.RET) {
+                const ret = args.RET.toUpperCase();
                 if (ret !== 'FULL' && ret !== 'HDRS') {
                     return {
                         code: 501,
@@ -2021,31 +2151,33 @@ class SMTPConnection extends EventEmitter {
 
     /**
      * Applies validated MAIL FROM parameters to session envelope
-     * @param {Object} parsed - Parsed address command with args
+     * @param parsed - Parsed address command with args
      */
-    _applyMailParams(parsed) {
+    _applyMailParams(parsed: ParsedAddress): void {
+        const args: Record<string, any> = parsed.args || {};
+        const envelope = this.session.envelope;
         // Apply BODY parameter
-        if (parsed.args.BODY) {
-            this.session.envelope.bodyType = parsed.args.BODY.toLowerCase();
+        if (args.BODY) {
+            envelope.bodyType = args.BODY.toLowerCase();
         }
 
         // Apply SMTPUTF8 parameter
-        if (parsed.args.SMTPUTF8 === true) {
-            this.session.envelope.smtpUtf8 = true;
+        if (args.SMTPUTF8 === true) {
+            envelope.smtpUtf8 = true;
         }
 
         // Apply REQUIRETLS parameter
-        if (parsed.args.REQUIRETLS === true) {
-            this.session.envelope.requireTLS = true;
+        if (args.REQUIRETLS === true) {
+            envelope.requireTLS = true;
         }
 
         // Apply DSN parameters
         if (!this._server.options.hideDSN) {
-            if (parsed.args.RET) {
-                this.session.envelope.dsn.ret = parsed.args.RET.toUpperCase();
+            if (args.RET) {
+                (envelope.dsn as SMTPServerEnvelopeDSN).ret = args.RET.toUpperCase();
             }
-            if (parsed.args.ENVID) {
-                this.session.envelope.dsn.envid = parsed.args.ENVID;
+            if (args.ENVID) {
+                (envelope.dsn as SMTPServerEnvelopeDSN).envid = args.ENVID;
             }
         }
     }
@@ -2053,7 +2185,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes MAIL FROM command, parses address and extra arguments
      */
-    handler_MAIL(command, callback) {
+    handler_MAIL(command: Buffer, callback: () => void): void {
         let parsed = this._parseAddressCommand('mail from', command);
 
         // in case we still haven't informed about the new connection emit it
@@ -2077,7 +2209,7 @@ class SMTPConnection extends EventEmitter {
         // Validate all MAIL FROM parameters
         const validationError = this._validateMailParams(parsed);
         if (validationError) {
-            this.send(validationError.code, validationError.message, validationError.enhancedCode);
+            this.send(validationError.code, validationError.message, validationError.enhancedCode || undefined);
             return callback();
         }
 
@@ -2085,7 +2217,7 @@ class SMTPConnection extends EventEmitter {
         // so the handler can access them
         this._applyMailParams(parsed);
 
-        this._server.onMailFrom(parsed, this.session, err => {
+        this._server.onMailFrom(parsed, this.session, (err?: SMTPServerError | null) => {
             if (err) {
                 this.send(err.responseCode || 550, err.message);
                 return callback();
@@ -2101,7 +2233,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes RCPT TO command, parses address and extra arguments
      */
-    handler_RCPT(command, callback) {
+    handler_RCPT(command: Buffer, callback: () => void): void {
         let parsed = this._parseAddressCommand('rcpt to', command);
 
         // recipient address can not be empty
@@ -2119,13 +2251,16 @@ class SMTPConnection extends EventEmitter {
             return callback();
         }
 
+        // the parameters that take a value have been checked to have one, see RCPT_VALUE_PARAMS
+        const args: Record<string, any> = parsed.args || {};
+
         // Process DSN parameters if DSN is supported
         if (!this._server.options.hideDSN) {
             // Validate NOTIFY parameter
-            if (parsed.args.NOTIFY) {
-                const notify = parsed.args.NOTIFY.toUpperCase();
+            if (args.NOTIFY) {
+                const notify = args.NOTIFY.toUpperCase();
                 const validNotifyValues = ['NEVER', 'SUCCESS', 'FAILURE', 'DELAY'];
-                const notifyValues = notify.split(',');
+                const notifyValues: string[] = notify.split(',');
 
                 for (let value of notifyValues) {
                     if (!validNotifyValues.includes(value)) {
@@ -2145,15 +2280,15 @@ class SMTPConnection extends EventEmitter {
             }
 
             // RFC 3461 section 4.2: ORCPT=addr-type;xtext
-            if (parsed.args.ORCPT && !/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+;./i.test(parsed.args.ORCPT)) {
+            if (args.ORCPT && !/^[a-z0-9!#$%&'*+/=?^_`{|}~-]+;./i.test(args.ORCPT)) {
                 this.send(501, 'Error: Bad ORCPT parameter syntax');
                 return callback();
             }
 
             // Store ORCPT parameter
-            if (parsed.args.ORCPT) {
+            if (args.ORCPT) {
                 parsed.dsn = parsed.dsn || {};
-                parsed.dsn.orcpt = parsed.args.ORCPT;
+                parsed.dsn.orcpt = args.ORCPT;
             }
         }
 
@@ -2166,7 +2301,7 @@ class SMTPConnection extends EventEmitter {
             return callback();
         }
 
-        this._server.onRcptTo(parsed, this.session, err => {
+        this._server.onRcptTo(parsed, this.session, (err?: SMTPServerError | null) => {
             if (err) {
                 this.send(err.responseCode || 550, err.message);
                 return callback();
@@ -2182,7 +2317,7 @@ class SMTPConnection extends EventEmitter {
                 index = rcptTo.findIndex(rcpt => rcpt.address.toLowerCase() === addressKey);
             }
 
-            if (index >= 0) {
+            if (index !== undefined && index >= 0) {
                 rcptTo[index] = parsed;
             } else {
                 rcptTo.push(parsed);
@@ -2197,7 +2332,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes DATA by forwarding incoming stream to the onData handler
      */
-    handler_DATA(command, callback) {
+    handler_DATA(command: Buffer, callback: () => void): void {
         if (!this.session.envelope.rcptTo.length) {
             this.send(503, 'Error: need RCPT command');
             return callback();
@@ -2207,20 +2342,21 @@ class SMTPConnection extends EventEmitter {
             return callback();
         }
 
-        this._dataStream = this._parser.startDataMode(this._server.options.size);
+        const parser = this._parser;
+        this._dataStream = parser.startDataMode(this._server.options.size);
 
-        let close = (err, message) => {
-            let i, len;
+        let close = (err?: SMTPServerError | null, message?: string | SMTPServerDataResult[]): void => {
+            let i: number, len: number;
 
             this._server.logger.debug(
                 {
                     tnx: 'data',
                     cid: this.id,
-                    bytes: this._parser.dataBytes,
+                    bytes: parser.dataBytes,
                     user: (this.session.user && this.session.user.username) || this.session.user
                 },
                 'C: <%s bytes of DATA>',
-                this._parser.dataBytes
+                parser.dataBytes
             );
 
             if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
@@ -2241,7 +2377,8 @@ class SMTPConnection extends EventEmitter {
                 // separate responses for every recipient when using LMTP
                 message.forEach(response => {
                     if (/Error\]$/i.test(Object.prototype.toString.call(response))) {
-                        this.send(response.responseCode || 450, response.message);
+                        let error = response as SMTPServerError;
+                        this.send(error.responseCode || 450, error.message);
                     } else {
                         this.send(250, typeof response === 'string' ? response : 'OK: message accepted', 'DATA_OK');
                     }
@@ -2266,7 +2403,7 @@ class SMTPConnection extends EventEmitter {
             }
         };
 
-        this._server.onData(this._dataStream, this.session, (err, message) => {
+        this._server.onData(this._dataStream, this.session, (err?: SMTPServerError | null, message?: string | SMTPServerDataResult[]) => {
             // ensure _dataStream is an object and not set to null by premature closing
             // do not continue until the stream has actually ended
             if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
@@ -2285,7 +2422,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes sendmail WIZ command, upgrades to "wizard mode"
      */
-    handler_WIZ(command, callback) {
+    handler_WIZ(command: Buffer, callback: () => void): void {
         let args = command.toString().trim().split(/\s+/);
         let password;
 
@@ -2308,7 +2445,7 @@ class SMTPConnection extends EventEmitter {
      * Processes sendmail SHELL command, should return interactive shell but this is a dummy function
      * so no actual shell is provided to the client
      */
-    handler_SHELL(command, callback) {
+    handler_SHELL(command: Buffer, callback: () => void): void {
         this._server.logger.info(
             {
                 tnx: 'shell',
@@ -2330,7 +2467,7 @@ class SMTPConnection extends EventEmitter {
     /**
      * Processes sendmail KILL command
      */
-    handler_KILL(command, callback) {
+    handler_KILL(command: Buffer, callback: () => void): void {
         this._server.logger.info(
             {
                 tnx: 'kill',
@@ -2344,8 +2481,8 @@ class SMTPConnection extends EventEmitter {
         callback();
     }
 
-    upgrade(callback, secureCallback) {
-        this._socket.unpipe(this._parser);
+    upgrade(callback: () => void, secureCallback?: () => void): void {
+        this._socket.unpipe(this._parser as SMTPStream);
 
         // Whatever the parser still holds (the rest of the chunk it is working on, the
         // chunks queued behind it, a partial line) arrived in plaintext after the
@@ -2355,16 +2492,17 @@ class SMTPConnection extends EventEmitter {
         // session ahead of the client's own commands (STARTTLS command injection). So the
         // parser is retired: closed, it drains what it holds without dispatching anything,
         // and the TLS session gets a new one that only ever sees bytes from the TLS socket
-        this._parser.isClosed = true;
+        (this._parser as SMTPStream).isClosed = true;
         this._parser = this._createParser();
 
         this._upgrading = true;
         setImmediate(callback); // resume, and so drain, the retired parser
 
-        let secureSocket;
+        let secureSocket: tls.TLSSocket | undefined;
 
-        let onError = err => {
-            const meta = {};
+        let onError = (rawErr?: TLSError | null): void => {
+            let err = rawErr;
+            const meta: TLSErrorMeta = {};
             if (secureSocket) {
                 meta.tlsProtocol = secureSocket.getProtocol();
             }
@@ -2404,7 +2542,7 @@ class SMTPConnection extends EventEmitter {
         };
 
         let secureContext = this._server.secureContext.get('*');
-        let socketOptions = {
+        let socketOptions: tls.TLSSocketOptions = {
             secureContext,
             isServer: true,
             server: this._server.server,
@@ -2413,44 +2551,42 @@ class SMTPConnection extends EventEmitter {
         };
 
         // Apply additional socket options if these are set in the server options
-        TLS_SOCKET_OPTIONS.forEach(key => {
-            if (key in this._server.options) {
-                socketOptions[key] = this._server.options[key];
-            }
-        });
+        copyTLSSocketOptions(this._server.options, socketOptions);
 
         // remove all listeners from the original socket besides the error handler
         this._socket.removeAllListeners();
         this._socket.on('error', err => this._onError(err));
 
         // upgrade connection
-        secureSocket = new tls.TLSSocket(this._socket, socketOptions);
+        const tlsSocket = new tls.TLSSocket(this._socket, socketOptions);
+        secureSocket = tlsSocket;
 
-        secureSocket.once('close', hadError => this._onCloseEvent(hadError));
-        secureSocket.once('error', err => onError(err));
-        secureSocket.once('_tlsError', err => onError(err));
-        secureSocket.once('clientError', err => onError(err));
+        tlsSocket.once('close', (hadError: boolean) => this._onCloseEvent(hadError));
+        tlsSocket.once('error', (err: TLSError) => onError(err));
+        tlsSocket.once('_tlsError', (err: TLSError) => onError(err));
+        tlsSocket.once('clientError', (err: TLSError) => onError(err));
 
-        secureSocket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
+        tlsSocket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
 
         // NB! once() and not on(): a TLS 1.2 client can renegotiate at any time, which
         // makes the socket emit 'secure' again. Re-running this would pipe the socket
         // into the parser a second time (every later command dispatched twice) and
         // would wipe the session state in the middle of an established session
-        secureSocket.once('secure', () => {
+        tlsSocket.once('secure', () => {
             if (!this._parser) {
                 // the connection was closed while the handshake was running
                 return;
             }
 
             // a client certificate was asked for and did not pass, refuse the session
-            let verifyError = verifyPeerCertificate(secureSocket, socketOptions);
+            let verifyError = verifyPeerCertificate(tlsSocket, socketOptions);
             if (verifyError) {
-                return secureSocket.destroy(verifyError);
+                tlsSocket.destroy(verifyError);
+                return;
             }
 
             this.session.secure = this.secure = true;
-            this._socket = secureSocket;
+            this._socket = tlsSocket;
             this._upgrading = false;
 
             // RFC 3207 section 4.2: once the TLS handshake completes, the server
@@ -2463,8 +2599,8 @@ class SMTPConnection extends EventEmitter {
             this.openingCommand = false;
             this._resetSession();
 
-            this.session.tlsOptions = this.tlsOptions = this._socket.getCipher();
-            this.session.servername = this._socket.servername;
+            this.session.tlsOptions = this.tlsOptions = tlsSocket.getCipher();
+            this.session.servername = tlsSocket.servername;
             let cipher = this.session.tlsOptions && this.session.tlsOptions.name;
             this._server.logger.info(
                 {
@@ -2476,7 +2612,7 @@ class SMTPConnection extends EventEmitter {
                 'Connection upgraded to TLS using',
                 cipher || 'N/A'
             );
-            this._server.onSecure(this._socket, this.session, err => {
+            this._server.onSecure(this._socket, this.session, (err?: Error | null) => {
                 if (!this._parser) {
                     // the client went away while the onSecure handler was running
                     return;
@@ -2492,10 +2628,3 @@ class SMTPConnection extends EventEmitter {
         });
     }
 }
-// Expose to the world
-module.exports.SMTPConnection = SMTPConnection;
-module.exports.SOCKET_TIMEOUT = SOCKET_TIMEOUT;
-module.exports.socketTimeout = socketTimeout;
-module.exports.TLS_SOCKET_OPTIONS = TLS_SOCKET_OPTIONS;
-module.exports.isAddressAllowed = isAddressAllowed;
-module.exports.verifyPeerCertificate = verifyPeerCertificate;

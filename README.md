@@ -6,6 +6,24 @@ Node.JS module for creating SMTP and LMTP server instances on the fly.
 
 See [smtp-server homepage](https://nodemailer.com/extras/smtp-server/) for documentation and terms.
 
+## Installation and module formats
+
+```
+npm install smtp-server
+```
+
+The package ships both an ES module build and a CommonJS build, with TypeScript type declarations for both, so there is no need for `@types/smtp-server` anymore. Use whichever module format your application uses:
+
+```js
+// ES modules
+import { SMTPServer } from 'smtp-server';
+
+// CommonJS
+const { SMTPServer } = require('smtp-server');
+```
+
+The `smtp-server/lib/*` deep imports (for example `require('smtp-server/lib/smtp-connection')`) keep working as well. In TypeScript the public types, such as `SMTPServerOptions`, `SMTPServerSession`, `SMTPServerAddress` and `SMTPServerDataStream`, are exported from the package root.
+
 ## Using the SIZE extension
 
 Set the `size` option to advertise a maximum message size to clients. Declared sizes in `MAIL FROM:<addr> SIZE=nnn` parameters are checked against the limit, but the actual transfer size is not enforced by the server itself — message data is streamed to the application, so it is up to the application to decide what to do with an oversized message. Check `stream.sizeExceeded` in your `onData` handler to detect oversized messages:

@@ -1,112 +1,140 @@
-const js = require('@eslint/js');
+import js from '@eslint/js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'eslint/config';
+import prettier from 'eslint-config-prettier';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
 
-module.exports = [
+const unusedVarsOptions = {
+    varsIgnorePattern: '^_',
+    argsIgnorePattern: '^_',
+    caughtErrorsIgnorePattern: '^_'
+};
+
+export default defineConfig([
     {
-        ignores: ['node_modules/**', 'coverage/**']
+        ignores: ['node_modules/**', 'coverage/**', 'dist/**']
     },
     js.configs.recommended,
     {
+        files: ['**/*.js', '**/*.cjs', '**/*.mjs', '**/*.ts'],
         languageOptions: {
-            ecmaVersion: 2020,
-            sourceType: 'commonjs',
-            globals: {
-                // Node.js globals
-                Buffer: 'readonly',
-                __dirname: 'readonly',
-                __filename: 'readonly',
-                console: 'readonly',
-                exports: 'writable',
-                global: 'readonly',
-                module: 'writable',
-                process: 'readonly',
-                require: 'readonly',
-                BigInt: 'readonly',
-                setImmediate: 'readonly',
-                clearImmediate: 'readonly',
-                setTimeout: 'readonly',
-                clearTimeout: 'readonly',
-                setInterval: 'readonly',
-                clearInterval: 'readonly',
-                AbortController: 'readonly',
-                AbortSignal: 'readonly',
-                URL: 'readonly',
-                URLSearchParams: 'readonly',
-                structuredClone: 'readonly',
-                // Test globals
-                it: 'readonly',
-                describe: 'readonly',
-                before: 'readonly',
-                after: 'readonly',
-                beforeEach: 'readonly',
-                afterEach: 'readonly'
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: Object.assign({}, globals.node, globals.es2022)
+        },
+        rules: {
+            // Error detection
+            'for-direction': 'error',
+            'no-div-regex': 'error',
+            eqeqeq: 'error',
+            'dot-notation': 'error',
+            curly: 'error',
+            'no-fallthrough': 'error',
+            'no-unused-expressions': [
+                'error',
+                {
+                    allowShortCircuit: true
+                }
+            ],
+            'no-unused-vars': ['error', unusedVarsOptions],
+            'handle-callback-err': 'error',
+            'no-new': 'error',
+            'new-cap': 'error',
+            'no-eval': 'error',
+            'no-invalid-this': 'error',
+            radix: ['error', 'always'],
+            'no-use-before-define': ['error', 'nofunc'],
+            'callback-return': ['error', ['callback', 'cb', 'done']],
+            'no-regex-spaces': 'error',
+            'no-empty': 'error',
+            'no-duplicate-case': 'error',
+            'no-empty-character-class': 'error',
+            'no-redeclare': 'off', // Disabled per project preference
+            'block-scoped-var': 'error',
+            'no-sequences': 'error',
+            'no-throw-literal': 'error',
+            'no-useless-call': 'error',
+            'no-useless-concat': 'error',
+            'no-void': 'error',
+            yoda: 'error',
+            'no-undef': 'error',
+            'no-var': 'error',
+            'no-bitwise': 'error',
+            'no-lonely-if': 'error',
+            'no-mixed-spaces-and-tabs': 'error',
+            'arrow-body-style': ['error', 'as-needed'],
+            'arrow-parens': ['error', 'as-needed'],
+            'prefer-arrow-callback': 'error',
+            'object-shorthand': 'error',
+            'prefer-spread': 'error',
+            'no-prototype-builtins': 'off', // Disabled per project preference
+            strict: ['error', 'global']
+        }
+    },
+    {
+        files: ['**/*.cjs'],
+        languageOptions: {
+            sourceType: 'commonjs'
+        }
+    },
+    {
+        files: ['**/*.ts'],
+        extends: [tseslint.configs.recommended],
+        rules: {
+            // Handled by the TypeScript compiler
+            'no-undef': 'off',
+            // TypeScript-aware replacements for the base rules
+            'no-unused-vars': 'off',
+            '@typescript-eslint/no-unused-vars': ['error', unusedVarsOptions],
+            'no-unused-expressions': 'off',
+            '@typescript-eslint/no-unused-expressions': [
+                'error',
+                {
+                    allowShortCircuit: true
+                }
+            ],
+            'no-use-before-define': 'off',
+            '@typescript-eslint/no-use-before-define': [
+                'error',
+                {
+                    functions: false,
+                    classes: true,
+                    variables: true,
+                    typedefs: false,
+                    ignoreTypeReferences: true
+                }
+            ],
+            'no-invalid-this': 'off',
+            '@typescript-eslint/no-invalid-this': 'error',
+            // Project preferences
+            'prefer-const': 'off',
+            '@typescript-eslint/no-explicit-any': 'off',
+            '@typescript-eslint/no-namespace': 'off',
+            '@typescript-eslint/no-this-alias': 'off'
+        }
+    },
+    {
+        // Type-aware rules for the library sources only. The tests are deliberately untyped
+        // stand-ins (mock connections cast through `any`, describe() and it() returning the
+        // promises of node:test), on which these rules would report on nearly every line
+        files: ['src/**/*.ts'],
+        languageOptions: {
+            parserOptions: {
+                projectService: true,
+                tsconfigRootDir: path.dirname(fileURLToPath(import.meta.url))
             }
         },
-        files: ['**/*.js'],
         rules: {
-            // Disable rules that conflict with the project's style
-            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
-            'no-prototype-builtins': 'off',
-            // Disable all formatting rules (handled by Prettier)
-            'array-bracket-spacing': 'off',
-            'arrow-parens': 'off',
-            'arrow-spacing': 'off',
-            'block-spacing': 'off',
-            'brace-style': 'off',
-            'comma-dangle': 'off',
-            'comma-spacing': 'off',
-            'comma-style': 'off',
-            'computed-property-spacing': 'off',
-            'dot-location': 'off',
-            'eol-last': 'off',
-            'func-call-spacing': 'off',
-            'function-call-argument-newline': 'off',
-            'function-paren-newline': 'off',
-            'generator-star-spacing': 'off',
-            'implicit-arrow-linebreak': 'off',
-            indent: 'off',
-            'jsx-quotes': 'off',
-            'key-spacing': 'off',
-            'keyword-spacing': 'off',
-            'linebreak-style': 'off',
-            'lines-around-comment': 'off',
-            'lines-between-class-members': 'off',
-            'max-len': 'off',
-            'multiline-ternary': 'off',
-            'new-parens': 'off',
-            'newline-per-chained-call': 'off',
-            'no-extra-parens': 'off',
-            'no-mixed-spaces-and-tabs': 'off',
-            'no-multi-spaces': 'off',
-            'no-multiple-empty-lines': 'off',
-            'no-tabs': 'off',
-            'no-trailing-spaces': 'off',
-            'no-whitespace-before-property': 'off',
-            'nonblock-statement-body-position': 'off',
-            'object-curly-newline': 'off',
-            'object-curly-spacing': 'off',
-            'object-property-newline': 'off',
-            'one-var-declaration-per-line': 'off',
-            'operator-linebreak': 'off',
-            'padded-blocks': 'off',
-            'padding-line-between-statements': 'off',
-            'quote-props': 'off',
-            quotes: 'off',
-            'rest-spread-spacing': 'off',
-            semi: 'off',
-            'semi-spacing': 'off',
-            'semi-style': 'off',
-            'space-before-blocks': 'off',
-            'space-before-function-paren': 'off',
-            'space-in-parens': 'off',
-            'space-infix-ops': 'off',
-            'space-unary-ops': 'off',
-            'switch-colon-spacing': 'off',
-            'template-curly-spacing': 'off',
-            'template-tag-spacing': 'off',
-            'unicode-bom': 'off',
-            'wrap-iife': 'off',
-            'wrap-regex': 'off',
-            'yield-star-spacing': 'off'
+            '@typescript-eslint/await-thenable': 'error',
+            '@typescript-eslint/no-floating-promises': 'error',
+            '@typescript-eslint/no-misused-promises': 'error',
+            '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+            '@typescript-eslint/no-deprecated': 'error',
+            // `void promise;` marks a promise that is deliberately left unawaited
+            'no-void': ['error', { allowAsStatement: true }]
         }
-    }
-];
+    },
+    prettier
+]);

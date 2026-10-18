@@ -1,0 +1,13 @@
+{
+    "clean": true,
+    "all": true,
+    "temp-directory": "./coverage/.tmp",
+    "reporter": ["text", "lcov"],
+    "include": ["src/**/*.ts"],
+    "exclude": ["src/types.ts", "src/**/*.d.ts"],
+    "exclude-after-remap": true,
+    "check-coverage": true,
+    "lines": 88,
+    "branches": 85,
+    "functions": 90
+}

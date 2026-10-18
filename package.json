@@ -2,15 +2,57 @@
     "name": "smtp-server",
     "version": "3.19.24",
     "description": "Create custom SMTP servers on the fly",
-    "main": "lib/smtp-server.js",
+    "type": "module",
+    "main": "./dist/cjs/smtp-server.js",
+    "types": "./dist/cjs/smtp-server.d.ts",
+    "typesVersions": {
+        "*": {
+            "lib/*.js": [
+                "dist/cjs/*.d.ts"
+            ],
+            "lib/*": [
+                "dist/cjs/*.d.ts"
+            ]
+        }
+    },
+    "exports": {
+        ".": {
+            "import": "./dist/esm/smtp-server.js",
+            "require": "./dist/cjs/smtp-server.js"
+        },
+        "./lib/*.js": {
+            "import": "./dist/esm/*.js",
+            "require": "./dist/cjs/*.js"
+        },
+        "./lib/*": {
+            "import": "./dist/esm/*.js",
+            "require": "./dist/cjs/*.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "dist",
+        "CHANGELOG.md",
+        "SECURITY.md",
+        "SECURITY.txt"
+    ],
     "scripts": {
-        "test": "grunt",
-        "test:bun": "bun node_modules/.bin/_mocha --exit test/*-test.js",
-        "test:coverage": "c8 --include 'lib/**' --check-coverage --lines 88 --branches 85 --functions 90 --reporter=text --reporter=lcov mocha --exit 'test/*-test.js'",
-        "compare": "node compare/compare.js",
+        "build": "node scripts/build.js",
+        "typecheck": "tsc -p tsconfig.json",
+        "pretest": "npm run build",
+        "test": "node --import tsx --test --test-force-exit --test-concurrency=1 --test-timeout=60000 $(find test -name '*-test.ts')",
+        "pretest:coverage": "npm run build",
+        "test:coverage": "c8 node --import tsx --test --test-force-exit --test-concurrency=1 --test-timeout=60000 $(find test -name '*-test.ts')",
+        "pretest:bun": "npm run build",
+        "test:bun": "bun test --timeout 60000 $(find ./test -name '*-test.ts')",
+        "compare": "node --import tsx compare/compare.ts",
         "postfix:start": "bash compare/postfix.sh start",
         "postfix:stop": "bash compare/postfix.sh stop",
-        "format": "prettier --write \"**/*.{js,json,md}\"",
+        "format": "prettier --write \"**/*.{js,cjs,ts,json,md}\"",
+        "format:check": "prettier --check \"**/*.{js,cjs,ts,json,md}\"",
+        "lint": "npm run typecheck && eslint .",
+        "lint:fix": "eslint . --fix",
+        "prepare": "npm run build",
         "update": "rm -rf node_modules package-lock.json && ncu -u && npm install"
     },
     "author": "Andris Reinman",
@@ -21,17 +63,18 @@
         "punycode.js": "2.3.1"
     },
     "devDependencies": {
-        "@eslint/js": "10.0.1",
+        "@eslint/js": "^10.0.1",
+        "@types/node": "20.19.43",
+        "@types/pem": "^1.14.4",
         "c8": "12.0.0",
-        "chai": "4.4.1",
         "eslint": "10.13.0",
-        "grunt": "1.6.3",
-        "grunt-cli": "1.5.0",
-        "grunt-eslint": "27.0.0",
-        "grunt-mocha-test": "0.13.3",
-        "mocha": "10.7.3",
+        "eslint-config-prettier": "10.1.8",
+        "globals": "17.13.0",
         "pem": "1.14.8",
-        "prettier": "3.9.10"
+        "prettier": "3.9.10",
+        "tsx": "4.23.15",
+        "typescript": "6.0.3",
+        "typescript-eslint": "8.71.2"
     },
     "repository": {
         "type": "git",
@@ -40,8 +83,10 @@
     "bugs": {
         "url": "https://github.com/nodemailer/smtp-server/issues"
     },
+    "homepage": "https://nodemailer.com/extras/smtp-server/",
     "keywords": [
-        "SMTP"
+        "SMTP",
+        "LMTP"
     ],
     "engines": {
         "node": ">=20.0.0"

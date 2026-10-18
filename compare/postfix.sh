@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Manages the Postfix reference server used by compare/compare.js. The image is
+# Manages the Postfix reference server used by compare/compare.ts. The image is
 # built from compare/Dockerfile and the container keeps running between
 # comparisons.
 #

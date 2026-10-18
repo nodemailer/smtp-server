@@ -1,11 +1,30 @@
-'use strict';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { chat, series, withServer, withClient, RawClient } from './test-client.js';
 
-const chai = require('chai');
-const { chat, series, withServer, withClient, RawClient } = require('./test-client');
+/**
+ * Asserts that every property of expected is present on actual with a deeply equal value
+ * (chai deep.include on objects)
+ */
+function assertDeepIncludes(actual: any, expected: Record<string, unknown>): void {
+    assert.ok(actual !== null && actual !== undefined, 'expected an object');
+    for (let [key, value] of Object.entries(expected)) {
+        assert.ok(key in actual, 'expected property ' + key);
+        assert.deepStrictEqual(actual[key], value, 'property ' + key);
+    }
+}
 
-const expect = chai.expect;
-
-chai.config.includeStack = true;
+/**
+ * Asserts that every property of expected is present on actual with a strictly equal value
+ * (chai include on objects)
+ */
+function assertIncludes(actual: any, expected: Record<string, unknown>): void {
+    assert.ok(actual !== null && actual !== undefined, 'expected an object');
+    for (let [key, value] of Object.entries(expected)) {
+        assert.ok(key in actual, 'expected property ' + key);
+        assert.strictEqual(actual[key], value, 'property ' + key);
+    }
+}
 
 const PLAIN = { disabledCommands: ['AUTH'] };
 const ENHANCED = { disabledCommands: ['AUTH'], hideENHANCEDSTATUSCODES: false };
@@ -19,7 +38,7 @@ const XCLIENT_MAPPED = { disabledCommands: ['AUTH'], useXClient: ['::ffff:127.0.
 const AUTH = {
     authMethods: ['PLAIN', 'LOGIN'],
     allowInsecureAuth: true,
-    onAuth(auth, session, callback) {
+    onAuth(auth: any, session: any, callback: any) {
         if (auth.username === 'user' && auth.password === 'pass') {
             return callback(null, { user: auth.username });
         }
@@ -34,7 +53,7 @@ const PLAIN_TOKEN = Buffer.from('\0user\0pass').toString('base64');
 // Every case runs against a fresh server: [description, server options, commands,
 // expected reply code for each command]. The greeting is checked separately and
 // every reply goes through the reply grammar check of test-client.js
-const CASES = {
+const CASES: Record<string, [string, any, string[], (number | null)[]][]> = {
     'Command sequencing (RFC 5321 section 4.1.4)': [
         ['MAIL before EHLO', PLAIN, [MAIL], [503]],
         ['RCPT before EHLO', PLAIN, [RCPT], [503]],
@@ -208,27 +227,29 @@ const CASES = {
     ]
 };
 
-describe('Protocol', function () {
-    this.timeout(10 * 1000);
-
+describe('Protocol', () => {
     for (let [group, cases] of Object.entries(CASES)) {
-        describe(group, function () {
+        describe(group, () => {
             for (let [description, options, commands, expected] of cases) {
                 it(description, () =>
                     withServer(options, async ({ port }) => {
                         let [greeting, ...replies] = await chat(port, commands);
-                        expect(greeting.code).to.equal(220);
-                        expect(replies.map(reply => reply && reply.code)).to.deep.equal(expected);
+                        assert.strictEqual(greeting!.code, 220);
+                        assert.deepStrictEqual(
+                            replies.map(reply => reply && reply.code),
+                            expected
+                        );
 
                         if (options.hideENHANCEDSTATUSCODES === false) {
                             // RFC 2034 section 3: every reply except the greeting, EHLO and 3xx
                             // carries an enhanced status code whose class matches the reply code
                             replies.forEach((reply, i) => {
                                 if (reply && !/^EHLO /.test(commands[i]) && reply.code !== 354) {
-                                    expect(
+                                    assert.strictEqual(
                                         reply.lines.every(line => /^\d{3}[ -]\d\.\d{1,3}\.\d{1,3} /.test(line)),
+                                        true,
                                         commands[i]
-                                    ).to.be.true;
+                                    );
                                 }
                             });
                         }
@@ -238,15 +259,15 @@ describe('Protocol', function () {
         });
     }
 
-    describe('Enhanced status code values (RFC 3463)', function () {
+    describe('Enhanced status code values (RFC 3463)', () => {
         // the enhanced status code of every reply to the commands, null if there is none
-        let enhancedCodes = (options, commands) =>
+        let enhancedCodes = (options: any, commands: string[]) =>
             withServer(Object.assign({ hideENHANCEDSTATUSCODES: false }, options), ({ port }) => chat(port, commands)).then(replies =>
-                replies.slice(1).map(reply => (reply.lines[0].match(/^\d{3}[ -](\d\.\d{1,3}\.\d{1,3}) /) || [])[1] || null)
+                replies.slice(1).map((reply: any) => (reply.lines[0].match(/^\d{3}[ -](\d\.\d{1,3}\.\d{1,3}) /) || [])[1] || null)
             );
 
-        it('should use 5.1.7 for a bad sender and 5.1.3 for a bad recipient', async function () {
-            expect(await enhancedCodes(PLAIN, ['EHLO client.example.com', 'MAIL FROM:<bad', MAIL, 'RCPT TO:<bad'])).to.deep.equal([
+        it('should use 5.1.7 for a bad sender and 5.1.3 for a bad recipient', async () => {
+            assert.deepStrictEqual(await enhancedCodes(PLAIN, ['EHLO client.example.com', 'MAIL FROM:<bad', MAIL, 'RCPT TO:<bad']), [
                 null,
                 '5.1.7',
                 '2.1.0',
@@ -254,36 +275,44 @@ describe('Protocol', function () {
             ]);
         });
 
-        it('should use 5.3.4 for a message over the size limit', async function () {
-            expect(
-                await enhancedCodes({ size: 1024, disabledCommands: ['AUTH'] }, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=2048'])
-            ).to.deep.equal([null, '5.3.4']);
+        it('should use 5.3.4 for a message over the size limit', async () => {
+            assert.deepStrictEqual(
+                await enhancedCodes({ size: 1024, disabledCommands: ['AUTH'] }, ['EHLO client.example.com', 'MAIL FROM:<sender@example.com> SIZE=2048']),
+                [null, '5.3.4']
+            );
         });
 
-        it('should use 5.7.0 for a refused proxy command and none for the XCLIENT greeting', async function () {
-            expect(await enhancedCodes(XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'XCLIENT ADDR=192.0.2.2', 'XFORWARD ADDR=192.0.2.3'])).to.deep.equal([
+        it('should use 5.7.0 for a refused proxy command and none for the XCLIENT greeting', async () => {
+            assert.deepStrictEqual(await enhancedCodes(XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'XCLIENT ADDR=192.0.2.2', 'XFORWARD ADDR=192.0.2.3']), [
                 null,
                 '5.7.0',
                 '5.7.0'
             ]);
         });
 
-        it('should use 4.5.3 for a recipient over maxRecipients', async function () {
-            expect(
-                await enhancedCodes(LIMITED, ['EHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'RCPT TO:<c@example.com>'])
-            ).to.deep.equal([null, '2.1.0', '2.1.5', '2.1.5', '4.5.3']);
+        it('should use 4.5.3 for a recipient over maxRecipients', async () => {
+            assert.deepStrictEqual(
+                await enhancedCodes(LIMITED, [
+                    'EHLO client.example.com',
+                    MAIL,
+                    'RCPT TO:<a@example.com>',
+                    'RCPT TO:<b@example.com>',
+                    'RCPT TO:<c@example.com>'
+                ]),
+                [null, '2.1.0', '2.1.5', '2.1.5', '4.5.3']
+            );
         });
     });
 
-    describe('Source routes', function () {
-        it('should drop the source route from the address', async function () {
-            let addresses = [];
+    describe('Source routes', () => {
+        it('should drop the source route from the address', async () => {
+            let addresses: string[] = [];
             let options = Object.assign({}, PLAIN, {
-                onMailFrom(address, session, callback) {
+                onMailFrom(address: any, session: any, callback: any) {
                     addresses.push(address.address);
                     callback();
                 },
-                onRcptTo(address, session, callback) {
+                onRcptTo(address: any, session: any, callback: any) {
                     addresses.push(address.address);
                     callback();
                 }
@@ -295,23 +324,23 @@ describe('Protocol', function () {
                     'RCPT TO:<@a.example.com,@b.example.com:rcpt@example.com>'
                 ])
             );
-            expect(addresses).to.deep.equal(['sender@example.com', 'rcpt@example.com']);
+            assert.deepStrictEqual(addresses, ['sender@example.com', 'rcpt@example.com']);
         });
     });
 
-    describe('EHLO capabilities', function () {
+    describe('EHLO capabilities', () => {
         // replies to the commands, the greeting left out
-        let replies = (options, commands) => withServer(options, ({ port }) => chat(port, commands)).then(list => list.slice(1));
-        let capabilities = async options => {
+        let replies = (options: any, commands: string[]): Promise<any[]> => withServer(options, ({ port }) => chat(port, commands)).then(list => list.slice(1));
+        let capabilities = async (options: any) => {
             let [ehlo] = await replies(options, ['EHLO client.example.com']);
-            return ehlo.lines.slice(1).map(line => line.slice(4));
+            return ehlo.lines.slice(1).map((line: string) => line.slice(4));
         };
 
-        it('should advertise the default extensions', async function () {
-            expect(await capabilities({})).to.deep.equal(['PIPELINING', '8BITMIME', 'SMTPUTF8', 'AUTH LOGIN PLAIN', 'STARTTLS']);
+        it('should advertise the default extensions', async () => {
+            assert.deepStrictEqual(await capabilities({}), ['PIPELINING', '8BITMIME', 'SMTPUTF8', 'AUTH LOGIN PLAIN', 'STARTTLS']);
         });
 
-        it('should advertise opt-in extensions', async function () {
+        it('should advertise opt-in extensions', async () => {
             let features = await capabilities({
                 hideENHANCEDSTATUSCODES: false,
                 hideDSN: false,
@@ -320,7 +349,7 @@ describe('Protocol', function () {
                 useXForward: true,
                 disabledCommands: ['AUTH', 'STARTTLS']
             });
-            expect(features).to.deep.equal([
+            assert.deepStrictEqual(features, [
                 'PIPELINING',
                 '8BITMIME',
                 'SMTPUTF8',
@@ -332,40 +361,39 @@ describe('Protocol', function () {
             ]);
         });
 
-        it('should stop advertising XCLIENT and XFORWARD after XCLIENT ADDR', async function () {
+        it('should stop advertising XCLIENT and XFORWARD after XCLIENT ADDR', async () => {
             let [, ehlo] = await replies(XCLIENT, ['XCLIENT ADDR=192.0.2.1', 'EHLO client.example.com']);
-            expect(ehlo.text).to.not.match(/XCLIENT|XFORWARD/);
+            assert.doesNotMatch(ehlo.text, /XCLIENT|XFORWARD/);
         });
 
-        it('should advertise XCLIENT and XFORWARD only to the peers in the trust lists', async function () {
+        it('should advertise XCLIENT and XFORWARD only to the peers in the trust lists', async () => {
             let [outside] = await replies(XCLIENT_UNTRUSTED, ['EHLO client.example.com']);
-            expect(outside.text).to.not.match(/XCLIENT|XFORWARD/);
+            assert.doesNotMatch(outside.text, /XCLIENT|XFORWARD/);
 
             let [listed] = await replies(XCLIENT_MAPPED, ['EHLO client.example.com']);
-            expect(listed.text)
-                .to.match(/XCLIENT/)
-                .and.match(/XFORWARD/);
+            assert.match(listed.text, /XCLIENT/);
+            assert.match(listed.text, /XFORWARD/);
         });
 
-        it('should hide AUTH once authenticated', async function () {
+        it('should hide AUTH once authenticated', async () => {
             let [before, , after] = await replies(AUTH, ['EHLO client.example.com', 'AUTH PLAIN ' + PLAIN_TOKEN, 'EHLO client.example.com']);
-            expect(before.text).to.match(/AUTH PLAIN LOGIN/);
-            expect(after.text).to.not.match(/AUTH/);
+            assert.match(before.text, /AUTH PLAIN LOGIN/);
+            assert.doesNotMatch(after.text, /AUTH/);
         });
     });
 
-    describe('XCLIENT and XFORWARD session data', function () {
+    describe('XCLIENT and XFORWARD session data', () => {
         // runs the commands and collects the given session details on every MAIL FROM
-        let sessionsOnMail = (commands, pick) => {
-            let sessions = [];
-            let onMailFrom = (address, session, callback) => {
+        let sessionsOnMail = (commands: string[], pick: (session: any) => any): Promise<any[]> => {
+            let sessions: any[] = [];
+            let onMailFrom = (address: any, session: any, callback: any) => {
                 sessions.push(pick(session));
                 callback();
             };
             return withServer(Object.assign({ onMailFrom }, XCLIENT), ({ port }) => chat(port, commands)).then(() => sessions);
         };
 
-        it('should expose the forwarded client in the session', async function () {
+        it('should expose the forwarded client in the session', async () => {
             let sessions = await sessionsOnMail(
                 [
                     'XFORWARD ADDR=192.0.2.1 NAME=client.example.com PORT=1234 HELO=helo.example.com',
@@ -376,54 +404,57 @@ describe('Protocol', function () {
                     'EHLO client.example.com',
                     MAIL
                 ],
-                session => ({
+                (session: any) => ({
                     remoteAddress: session.remoteAddress,
                     remotePort: session.remotePort,
                     clientHostname: session.clientHostname,
                     xForward: Object.fromEntries(session.xForward)
                 })
             );
-            expect(sessions[0]).to.deep.include({ remoteAddress: '192.0.2.1', remotePort: 1234, clientHostname: 'client.example.com' });
-            expect(sessions[0].xForward).to.include({ ADDR: '192.0.2.1', HELO: 'helo.example.com' });
-            expect(sessions[1]).to.deep.include({ remoteAddress: '198.51.100.7', remotePort: 4321 });
+            assertDeepIncludes(sessions[0], { remoteAddress: '192.0.2.1', remotePort: 1234, clientHostname: 'client.example.com' });
+            assertIncludes(sessions[0].xForward, { ADDR: '192.0.2.1', HELO: 'helo.example.com' });
+            assertDeepIncludes(sessions[1], { remoteAddress: '198.51.100.7', remotePort: 4321 });
         });
 
-        it('should keep the XCLIENT address if XFORWARD is attempted afterwards', async function () {
+        it('should keep the XCLIENT address if XFORWARD is attempted afterwards', async () => {
             let sessions = await sessionsOnMail(
                 ['XCLIENT ADDR=198.51.100.7', 'XFORWARD ADDR=192.0.2.66', 'EHLO client.example.com', MAIL],
-                session => session.remoteAddress
+                (session: any) => session.remoteAddress
             );
-            expect(sessions).to.deep.equal(['198.51.100.7']);
+            assert.deepStrictEqual(sessions, ['198.51.100.7']);
         });
 
-        it('should refresh the session when XFORWARD follows EHLO', async function () {
+        it('should refresh the session when XFORWARD follows EHLO', async () => {
             // XFORWARD is not followed by a new EHLO, so without this the handlers of the
             // transaction would still see the proxy
-            let sessions = await sessionsOnMail(['EHLO proxy.example.com', 'XFORWARD ADDR=192.0.2.1 PORT=2525 NAME=client.example.com', MAIL], session => ({
-                remoteAddress: session.remoteAddress,
-                remotePort: session.remotePort,
-                clientHostname: session.clientHostname,
-                xForward: Object.fromEntries(session.xForward),
-                xClient: Object.fromEntries(session.xClient)
-            }));
-            expect(sessions[0]).to.deep.include({ remoteAddress: '192.0.2.1', remotePort: 2525, clientHostname: 'client.example.com' });
+            let sessions = await sessionsOnMail(
+                ['EHLO proxy.example.com', 'XFORWARD ADDR=192.0.2.1 PORT=2525 NAME=client.example.com', MAIL],
+                (session: any) => ({
+                    remoteAddress: session.remoteAddress,
+                    remotePort: session.remotePort,
+                    clientHostname: session.clientHostname,
+                    xForward: Object.fromEntries(session.xForward),
+                    xClient: Object.fromEntries(session.xClient)
+                })
+            );
+            assertDeepIncludes(sessions[0], { remoteAddress: '192.0.2.1', remotePort: 2525, clientHostname: 'client.example.com' });
             // the address the proxy connected from is kept next to the forwarded one, in the XFORWARD map
-            expect(sessions[0].xForward).to.include({ ADDR: '192.0.2.1', 'ADDR:DEFAULT': '127.0.0.1' });
-            expect(sessions[0].xClient).to.not.have.property('ADDR:DEFAULT');
+            assertIncludes(sessions[0].xForward, { ADDR: '192.0.2.1', 'ADDR:DEFAULT': '127.0.0.1' });
+            assert.ok(!('ADDR:DEFAULT' in sessions[0].xClient), 'xClient should not have ADDR:DEFAULT');
         });
 
-        describe('XCLIENT and the authenticated identity', function () {
+        describe('XCLIENT and the authenticated identity', () => {
             // the session user seen by onMailFrom after each command sequence
-            let usersOnMail = commands => {
-                let users = [];
+            let usersOnMail = (commands: string[]): Promise<any[]> => {
+                let users: any[] = [];
                 let options = {
                     useXClient: true,
                     authOptional: true,
                     allowInsecureAuth: true,
-                    onAuth(auth, session, callback) {
+                    onAuth(auth: any, session: any, callback: any) {
                         callback(null, { user: auth.username });
                     },
-                    onMailFrom(address, session, callback) {
+                    onMailFrom(address: any, session: any, callback: any) {
                         users.push(session.user);
                         callback();
                     }
@@ -431,7 +462,7 @@ describe('Protocol', function () {
                 return withServer(options, ({ port }) => chat(port, commands)).then(() => users);
             };
 
-            it('should drop an identity the proxy authenticated as on XCLIENT ADDR', async function () {
+            it('should drop an identity the proxy authenticated as on XCLIENT ADDR', async () => {
                 // the forwarded client must not inherit the proxy's own login
                 let users = await usersOnMail([
                     'EHLO proxy.example.com',
@@ -440,96 +471,97 @@ describe('Protocol', function () {
                     'EHLO client.example.com',
                     MAIL
                 ]);
-                expect(users).to.deep.equal([false]);
+                assert.deepStrictEqual(users, [false]);
             });
 
-            it('should apply a LOGIN attribute given together with ADDR', async function () {
+            it('should apply a LOGIN attribute given together with ADDR', async () => {
                 let users = await usersOnMail(['XCLIENT ADDR=192.0.2.1 LOGIN=forwarded', 'EHLO client.example.com', MAIL]);
-                expect(users).to.deep.equal(['forwarded']);
+                assert.deepStrictEqual(users, ['forwarded']);
             });
         });
 
-        it('should match the XCLIENT trust list against the PROXY protocol address', async function () {
+        it('should match the XCLIENT trust list against the PROXY protocol address', async () => {
             // behind a PROXY protocol load balancer the peer to trust is the one the header
             // names, not the load balancer itself
             let options = { disabledCommands: ['AUTH'], useProxy: true, useXClient: ['192.0.2.1'] };
-            let xclientVia = async (port, proxiedAddress) => {
+            let xclientVia = async (port: number, proxiedAddress: string) => {
                 let client = await RawClient.connect(port);
                 try {
                     client.write('PROXY TCP4 ' + proxiedAddress + ' 203.0.113.7 35646 25\r\n');
-                    expect((await client.read()).code).to.equal(220);
-                    return (await client.command('XCLIENT ADDR=198.51.100.7')).code;
+                    assert.strictEqual((await client.read())!.code, 220);
+                    return (await client.command('XCLIENT ADDR=198.51.100.7'))!.code;
                 } finally {
                     client.close();
                 }
             };
             await withServer(options, async ({ port }) => {
-                expect(await xclientVia(port, '192.0.2.1')).to.equal(220);
-                expect(await xclientVia(port, '192.0.2.2')).to.equal(550);
+                assert.strictEqual(await xclientVia(port, '192.0.2.1'), 220);
+                assert.strictEqual(await xclientVia(port, '192.0.2.2'), 550);
             });
         });
     });
 
-    describe('LMTP DATA replies', function () {
+    describe('LMTP DATA replies', () => {
         // LMTP sends one reply per accepted recipient after the message (RFC 2033 section 4.2)
-        let deliver = onData =>
+        let deliver = (onData: any) =>
             withClient(Object.assign({ onData }, LMTP), async client => {
                 await series(['LHLO client.example.com', MAIL, 'RCPT TO:<a@example.com>', 'RCPT TO:<b@example.com>', 'DATA'], command =>
                     client.command(command)
                 );
                 client.write('Subject: test\r\n\r\nHello\r\n.\r\n');
                 let replies = [await client.read(), await client.read()];
-                expect((await client.command('NOOP')).code).to.equal(250);
-                return replies.map(reply => reply.code + ' ' + reply.text);
+                assert.strictEqual((await client.command('NOOP'))!.code, 250);
+                return replies.map((reply: any) => reply.code + ' ' + reply.text);
             });
 
-        let consume = (stream, callback, result) => {
+        let consume = (stream: any, callback: any, result: any[]) => {
             stream.on('data', () => false);
             stream.on('end', () => callback(...result));
         };
 
-        it('should reply for every recipient on success', async function () {
-            let replies = await deliver((stream, session, callback) => consume(stream, callback, [null, 'Delivered']));
-            expect(replies).to.deep.equal(['250 Delivered', '250 Delivered']);
+        it('should reply for every recipient on success', async () => {
+            let replies = await deliver((stream: any, session: any, callback: any) => consume(stream, callback, [null, 'Delivered']));
+            assert.deepStrictEqual(replies, ['250 Delivered', '250 Delivered']);
         });
 
-        it('should reply for every recipient on failure', async function () {
-            let replies = await deliver((stream, session, callback) => {
-                let err = new Error('Mailbox full');
+        it('should reply for every recipient on failure', async () => {
+            let replies = await deliver((stream: any, session: any, callback: any) => {
+                let err: any = new Error('Mailbox full');
                 err.responseCode = 452;
                 consume(stream, callback, [err]);
             });
-            expect(replies).to.deep.equal(['452 Mailbox full', '452 Mailbox full']);
+            assert.deepStrictEqual(replies, ['452 Mailbox full', '452 Mailbox full']);
         });
 
-        it('should use separate results per recipient', async function () {
-            let replies = await deliver((stream, session, callback) => {
-                let err = new Error('No such user');
+        it('should use separate results per recipient', async () => {
+            let replies = await deliver((stream: any, session: any, callback: any) => {
+                let err: any = new Error('No such user');
                 err.responseCode = 550;
                 consume(stream, callback, [null, ['Delivered to a', err]]);
             });
-            expect(replies).to.deep.equal(['250 Delivered to a', '550 No such user']);
+            assert.deepStrictEqual(replies, ['250 Delivered to a', '550 No such user']);
         });
     });
 
-    describe('Server shutdown', function () {
+    describe('Server shutdown', () => {
         it('should refuse commands once the server is closing', () =>
             withClient(PLAIN, async (client, greeting, server) => {
-                expect(greeting.code).to.equal(220);
+                assert.strictEqual(greeting!.code, 220);
                 server.close();
-                expect(await client.command('EHLO client.example.com')).to.include({ code: 421 });
-                expect(await client.read()).to.be.null;
+                assertIncludes(await client.command('EHLO client.example.com'), { code: 421 });
+                assert.strictEqual(await client.read(), null);
             }));
 
         it('should close idle sessions once closeTimeout expires', () =>
             withClient(Object.assign({ closeTimeout: 200 }, PLAIN), async (client, greeting, server) => {
-                expect(greeting.code).to.equal(220);
+                assert.strictEqual(greeting!.code, 220);
                 let start = Date.now();
-                let closed = new Promise(resolve => server.close(resolve));
-                expect(await client.read()).to.include({ code: 421 });
-                expect(await client.read()).to.be.null;
+                let closed = new Promise<void>(resolve => server.close(() => resolve()));
+                assertIncludes(await client.read(), { code: 421 });
+                assert.strictEqual(await client.read(), null);
                 await closed;
-                expect(Date.now() - start).to.be.below(2000);
+                let elapsed = Date.now() - start;
+                assert.ok(elapsed < 2000, 'expected ' + elapsed + ' to be below 2000');
             }));
     });
 });

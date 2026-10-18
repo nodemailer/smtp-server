@@ -1,13 +1,32 @@
-'use strict';
+import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import net from 'node:net';
+import tls from 'node:tls';
+import { getLogger, type Logger } from 'nodemailer/lib/shared';
+import punycode from 'punycode.js';
+import {
+    SMTPConnection,
+    copyTLSSocketOptions,
+    isAddressAllowed,
+    socketTimeout,
+    verifyPeerCertificate,
+    type SMTPConnectionOptions,
+    type TLSError,
+    type TLSErrorMeta
+} from './smtp-connection.js';
+import tlsOptions from './tls-options.js';
+import type {
+    SMTPServerAddress,
+    SMTPServerAuthentication,
+    SMTPServerAuthenticationResponse,
+    SMTPServerDataResult,
+    SMTPServerDataStream,
+    SMTPServerEvents,
+    SMTPServerOptions,
+    SMTPServerSession
+} from './types.js';
 
-const net = require('net');
-const tls = require('tls');
-const { SMTPConnection, socketTimeout, TLS_SOCKET_OPTIONS, isAddressAllowed, verifyPeerCertificate } = require('./smtp-connection');
-const tlsOptions = require('./tls-options');
-const EventEmitter = require('events');
-const shared = require('nodemailer/lib/shared');
-const punycode = require('punycode.js');
-const crypto = require('crypto');
+export type * from './types.js';
 
 const CLOSE_TIMEOUT = 30 * 1000; // how much to wait until pending connections are terminated
 
@@ -16,17 +35,63 @@ const CLOSE_TIMEOUT = 30 * 1000; // how much to wait until pending connections a
 // unbounded input from a peer that withholds the terminating newline
 const MAX_PROXY_HEADER_LENGTH = 1024;
 
+/** Server options once the constructor has normalized the command and mechanism lists */
+export type SMTPServerResolvedOptions = SMTPServerOptions & {
+    disabledCommands: string[];
+    authMethods: string[];
+};
+
+/** Connection details known before the SMTP session starts, plus the PROXY header flag */
+type SocketOptions = SMTPConnectionOptions & { id: string };
+
+type HandlerName = 'onConnect' | 'onSecure' | 'onAuth' | 'onMailFrom' | 'onRcptTo' | 'onData' | 'onClose';
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+export interface SMTPServer {
+    on<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    on(event: string | symbol, listener: (...args: any[]) => void): this;
+    once<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    once(event: string | symbol, listener: (...args: any[]) => void): this;
+    off<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    off(event: string | symbol, listener: (...args: any[]) => void): this;
+    addListener<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    addListener(event: string | symbol, listener: (...args: any[]) => void): this;
+    removeListener<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    removeListener(event: string | symbol, listener: (...args: any[]) => void): this;
+    prependListener<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    prependListener(event: string | symbol, listener: (...args: any[]) => void): this;
+    prependOnceListener<K extends keyof SMTPServerEvents>(event: K, listener: (...args: SMTPServerEvents[K]) => void): this;
+    prependOnceListener(event: string | symbol, listener: (...args: any[]) => void): this;
+    emit<K extends keyof SMTPServerEvents>(event: K, ...args: SMTPServerEvents[K]): boolean;
+    emit(event: string | symbol, ...args: any[]): boolean;
+}
+
 /**
  * Creates a SMTP server instance.
- *
- * @constructor
- * @param {Object} options Connection and SMTP optionsž
  */
-class SMTPServer extends EventEmitter {
-    constructor(options) {
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+export class SMTPServer extends EventEmitter {
+    options: SMTPServerResolvedOptions;
+    logger: Logger;
+    secureContext!: Map<string, tls.SecureContext>;
+    /** A set of all currently open connections */
+    connections: Set<SMTPConnection>;
+    server: net.Server;
+
+    /** Timeout after close has been called until pending connections are forcibly closed */
+    _closeTimeout: NodeJS.Timeout | false;
+    /**
+     * Sockets that were accepted but have not reached connect() yet (PROXY header
+     * or implicit TLS handshake still pending). Maps the accepted socket to the
+     * socket on top of it, the TLS socket once the handshake has started
+     */
+    _pendingSockets: Map<net.Socket, net.Socket>;
+
+    constructor(options?: SMTPServerOptions | null) {
         super();
 
-        this.options = options || {};
+        // NB! the options object of the caller is used and modified in place, as it always has been
+        this.options = (options || {}) as SMTPServerResolvedOptions;
 
         // NB! updateSecureContext() below merges the built-in key/cert into this.options,
         // after which there is no way to tell what the operator actually supplied.
@@ -34,14 +99,16 @@ class SMTPServer extends EventEmitter {
         let hasOwnCertificate = !!(this.options.key || this.options.cert || this.options.pfx || this.options.SNICallback || this.options.sniOptions);
 
         // setup disabled commands list
-        this.options.disabledCommands = [].concat(this.options.disabledCommands || []).map(command => (command || '').toString().toUpperCase().trim());
+        this.options.disabledCommands = ([] as unknown[])
+            .concat(this.options.disabledCommands || [])
+            .map(command => (command || '').toString().toUpperCase().trim());
 
         this._warnAboutDefaultCertificate(hasOwnCertificate);
 
         this.updateSecureContext();
 
         // setup allowed auth methods
-        this.options.authMethods = [].concat(this.options.authMethods || []).map(method => (method || '').toString().toUpperCase().trim());
+        this.options.authMethods = ([] as unknown[]).concat(this.options.authMethods || []).map(method => (method || '').toString().toUpperCase().trim());
 
         if (!this.options.authMethods.length) {
             this.options.authMethods = ['LOGIN', 'PLAIN'];
@@ -62,32 +129,21 @@ class SMTPServer extends EventEmitter {
             this.options.hideREQUIRETLS = true;
         }
 
-        this.logger = shared.getLogger(this.options, {
+        this.logger = getLogger(this.options, {
             component: this.options.component || 'smtp-server'
         });
 
         // apply shorthand handlers
-        ['onConnect', 'onSecure', 'onAuth', 'onMailFrom', 'onRcptTo', 'onData', 'onClose'].forEach(handler => {
+        (['onConnect', 'onSecure', 'onAuth', 'onMailFrom', 'onRcptTo', 'onData', 'onClose'] as HandlerName[]).forEach(handler => {
             if (typeof this.options[handler] === 'function') {
-                this[handler] = this.options[handler];
+                (this as Record<HandlerName, unknown>)[handler] = this.options[handler];
             }
         });
 
-        /**
-         * Timeout after close has been called until pending connections are forcibly closed
-         */
         this._closeTimeout = false;
 
-        /**
-         * A set of all currently open connections
-         */
         this.connections = new Set();
 
-        /**
-         * Sockets that were accepted but have not reached connect() yet (PROXY header
-         * or implicit TLS handshake still pending). Maps the accepted socket to the
-         * socket on top of it, the TLS socket once the handshake has started
-         */
         this._pendingSockets = new Map();
 
         // setup server listener and connection handler
@@ -117,7 +173,7 @@ class SMTPServer extends EventEmitter {
                             socket.destroy();
                             return this._onError(err);
                         }
-                        this.connect(tlsSocket, socketOptions);
+                        this.connect(tlsSocket as tls.TLSSocket, socketOptions);
                     });
                 });
             });
@@ -151,9 +207,9 @@ class SMTPServer extends EventEmitter {
      * this.logger, which does not exist yet and is a no-op unless logging was
      * explicitly enabled, so an explicit `logger: false` is honored as an opt-out
      *
-     * @param {Boolean} hasOwnCertificate Whether the operator supplied a certificate
+     * @param hasOwnCertificate Whether the operator supplied a certificate
      */
-    _warnAboutDefaultCertificate(hasOwnCertificate) {
+    _warnAboutDefaultCertificate(hasOwnCertificate: boolean): void {
         // a server with `secured` gets its TLS from an external terminator, and a
         // plaintext server without STARTTLS never presents a certificate at all
         let terminatesTls =
@@ -170,7 +226,7 @@ class SMTPServer extends EventEmitter {
         );
     }
 
-    connect(socket, socketOptions) {
+    connect(socket: net.Socket | tls.TLSSocket, socketOptions?: SMTPConnectionOptions | null): void {
         let connection = new SMTPConnection(this, socket, socketOptions);
         this.connections.add(connection);
         connection.on('error', err => this._onError(err));
@@ -181,22 +237,31 @@ class SMTPServer extends EventEmitter {
     /**
      * Start listening on selected port and interface
      */
-    listen(...args) {
+    listen(port?: number, hostname?: string, backlog?: number, listeningListener?: () => void): net.Server;
+    listen(port?: number, hostname?: string, listeningListener?: () => void): net.Server;
+    listen(port?: number, backlog?: number, listeningListener?: () => void): net.Server;
+    listen(port?: number, listeningListener?: () => void): net.Server;
+    listen(path: string, backlog?: number, listeningListener?: () => void): net.Server;
+    listen(path: string, listeningListener?: () => void): net.Server;
+    listen(options: net.ListenOptions, listeningListener?: () => void): net.Server;
+    listen(handle: any, backlog?: number, listeningListener?: () => void): net.Server;
+    listen(handle: any, listeningListener?: () => void): net.Server;
+    listen(...args: any[]): net.Server {
         return this.server.listen(...args);
     }
 
     /**
      * Closes the server
      *
-     * @param {Function} callback Callback to run once the server is fully closed
+     * @param callback Callback to run once the server is fully closed
      */
-    close(callback) {
+    close(callback?: (() => void) | null): void {
         let connections = this.connections.size;
         let timeout = this.options.closeTimeout || CLOSE_TIMEOUT;
 
         // stop accepting new connections
         this.server.close(() => {
-            clearTimeout(this._closeTimeout);
+            clearTimeout(this._closeTimeout || undefined);
             if (typeof callback === 'function') {
                 return callback();
             }
@@ -241,7 +306,8 @@ class SMTPServer extends EventEmitter {
             if (typeof callback === 'function') {
                 const realCallback = callback;
                 callback = null;
-                return realCallback();
+                realCallback();
+                return;
             }
         }, timeout);
 
@@ -252,10 +318,15 @@ class SMTPServer extends EventEmitter {
     /**
      * Authentication handler. Override this
      *
-     * @param {Object} auth Authentication options
-     * @param {Function} callback Callback to run once the user is authenticated
+     * @param auth Authentication options
+     * @param session Session of the connection
+     * @param callback Callback to run once the user is authenticated
      */
-    onAuth(auth, session, callback) {
+    onAuth(
+        auth: SMTPServerAuthentication,
+        session: SMTPServerSession,
+        callback: (err: Error | null | undefined, response?: SMTPServerAuthenticationResponse) => void
+    ): void {
         if (auth.method === 'XOAUTH2') {
             return callback(null, {
                 data: {
@@ -267,7 +338,7 @@ class SMTPServer extends EventEmitter {
         }
 
         if (auth.method === 'XCLIENT') {
-            return callback(); // pass through
+            return callback(undefined); // pass through
         }
 
         return callback(null, {
@@ -275,24 +346,31 @@ class SMTPServer extends EventEmitter {
         });
     }
 
-    onConnect(session, callback) {
+    /** Connection handler. Override this */
+    onConnect(session: SMTPServerSession, callback: (err?: Error | null) => void): void {
         setImmediate(callback);
     }
 
-    onMailFrom(address, session, callback) {
+    /** MAIL FROM handler. Override this */
+    onMailFrom(address: SMTPServerAddress, session: SMTPServerSession, callback: (err?: Error | null) => void): void {
         setImmediate(callback);
     }
 
-    onRcptTo(address, session, callback) {
+    /** RCPT TO handler. Override this */
+    onRcptTo(address: SMTPServerAddress, session: SMTPServerSession, callback: (err?: Error | null) => void): void {
         setImmediate(callback);
     }
-    onSecure(socket, session, callback) {
+
+    /** TLS handler, called once the TLS session is established. Override this */
+    onSecure(socket: net.Socket | tls.TLSSocket, session: SMTPServerSession, callback: (err?: Error | null) => void): void {
         setImmediate(callback);
     }
-    onData(stream, session, callback) {
+
+    /** Message handler. Override this */
+    onData(stream: SMTPServerDataStream, session: SMTPServerSession, callback: (err?: Error | null, message?: string | SMTPServerDataResult[]) => void): void {
         let chunklen = 0;
 
-        stream.on('data', chunk => {
+        stream.on('data', (chunk: Buffer) => {
             chunklen += chunk.length;
         });
 
@@ -309,13 +387,19 @@ class SMTPServer extends EventEmitter {
         });
     }
 
-    onClose(/* session */) {
+    /** Called once a connection is closed. Override this */
+    onClose(_session: SMTPServerSession, _callback?: (err?: Error | null) => void): void {
         // do nothing
     }
 
-    updateSecureContext(options) {
+    /**
+     * Rebuilds the TLS contexts, with the given options merged into the server options first
+     *
+     * @param [options] TLS options to apply
+     */
+    updateSecureContext(options?: tls.TlsOptions | SMTPServerOptions | null): void {
         Object.keys(options || {}).forEach(key => {
-            this.options[key] = options[key];
+            (this.options as unknown as Record<string, unknown>)[key] = (options as unknown as Record<string, unknown>)[key];
         });
 
         let defaultTlsOptions = tlsOptions(this.options);
@@ -325,13 +409,14 @@ class SMTPServer extends EventEmitter {
 
         let ctxMap = this.options.sniOptions || {};
         // sniOptions is either an object or a Map with domain names as keys and TLS option objects as values
-        if (typeof ctxMap.get === 'function') {
-            ctxMap.forEach((ctx, servername) => {
+        if (ctxMap instanceof Map || typeof (ctxMap as unknown as Map<string, tls.TlsOptions>).get === 'function') {
+            (ctxMap as unknown as Map<string, tls.TlsOptions>).forEach((ctx, servername) => {
                 this.secureContext.set(this._normalizeHostname(servername), tls.createSecureContext(tlsOptions(ctx)));
             });
         } else {
-            Object.keys(ctxMap).forEach(servername => {
-                this.secureContext.set(this._normalizeHostname(servername), tls.createSecureContext(tlsOptions(ctxMap[servername])));
+            let ctxObject = ctxMap as unknown as Record<string, tls.TlsOptions>;
+            Object.keys(ctxObject).forEach(servername => {
+                this.secureContext.set(this._normalizeHostname(servername), tls.createSecureContext(tlsOptions(ctxObject[servername])));
             });
         }
 
@@ -340,7 +425,7 @@ class SMTPServer extends EventEmitter {
 
             Object.keys(defaultTlsOptions || {}).forEach(key => {
                 if (!(key in this.options)) {
-                    this.options[key] = defaultTlsOptions[key];
+                    (this.options as unknown as Record<string, unknown>)[key] = (defaultTlsOptions as unknown as Record<string, unknown>)[key];
                 }
             });
         }
@@ -351,11 +436,11 @@ class SMTPServer extends EventEmitter {
     /**
      * Setup server event handlers
      */
-    _setListeners() {
+    _setListeners(): void {
         let server = this.server;
-        server.once('listening', (...args) => this._onListening(...args));
-        server.once('close', (...args) => this._onClose(server, ...args));
-        server.on('error', (...args) => this._onError(...args));
+        server.once('listening', () => this._onListening());
+        server.once('close', () => this._onClose(server));
+        server.on('error', (err: Error) => this._onError(err));
     }
 
     /**
@@ -363,13 +448,12 @@ class SMTPServer extends EventEmitter {
      *
      * @event
      */
-    _onListening() {
-        let address = this.server.address();
+    _onListening(): void {
+        let serverAddress = this.server.address();
 
         // address will be null if listener is using Unix socket
-        if (address === null) {
-            address = { address: null, port: null, family: null };
-        }
+        let address: { address: string | null; port: number | null; family: string | null } =
+            serverAddress && typeof serverAddress === 'object' ? serverAddress : { address: null, port: null, family: null };
 
         this.logger.info(
             //
@@ -393,7 +477,7 @@ class SMTPServer extends EventEmitter {
      *
      * @event
      */
-    _onClose(server) {
+    _onClose(server: net.Server): void {
         this.logger.info(
             {
                 tnx: 'closed'
@@ -412,7 +496,7 @@ class SMTPServer extends EventEmitter {
      *
      * @event
      */
-    _onError(err) {
+    _onError(err: Error): void {
         this.emit('error', err);
     }
 
@@ -422,14 +506,16 @@ class SMTPServer extends EventEmitter {
      * client that never sends the PROXY header or never completes the implicit TLS
      * handshake would otherwise hold the socket forever.
      *
-     * @param {Socket} socket Accepted socket
-     * @param {Boolean} handshake true if an implicit TLS handshake precedes connect()
-     * @returns {Function|Boolean} Function that removes the guard, or false if the socket was refused
+     * @param socket Accepted socket
+     * @param handshake true if an implicit TLS handshake precedes connect()
+     * @returns Function that removes the guard, or false if the socket was refused
      */
-    _acceptSocket(socket, handshake) {
+    _acceptSocket(socket: net.Socket, handshake: boolean): (() => void) | false {
         if (!handshake && !this._expectsProxyHeader(socket)) {
             // plain sockets go straight to connect(), nothing to guard
-            return () => false;
+            return () => {
+                // nothing to release
+            };
         }
 
         if (this.options.maxClients && this._pendingSockets.size >= this.options.maxClients) {
@@ -479,42 +565,44 @@ class SMTPServer extends EventEmitter {
      * with an array (addresses are normalized, so an IPv4 peer of a dual-stack listener
      * matches its IPv4 entry)
      *
-     * @param {Socket} socket Accepted socket
-     * @returns {Boolean}
+     * @param socket Accepted socket
+     * @returns true if the header is expected
      */
-    _expectsProxyHeader(socket) {
+    _expectsProxyHeader(socket: net.Socket): boolean {
         return isAddressAllowed(this.options.useProxy, socket.remoteAddress);
     }
 
-    _handleProxy(socket, callback) {
-        let socketOptions = {
+    _handleProxy(socket: net.Socket, callback: (err: Error | null, socketOptions?: SocketOptions) => void): void {
+        let socketOptions: SocketOptions = {
             id: BigInt('0x' + crypto.randomBytes(10).toString('hex'))
                 .toString(32)
                 .padStart(16, '0')
         };
 
         if (!this._expectsProxyHeader(socket)) {
-            socketOptions.ignore = this.options.ignoredHosts && this.options.ignoredHosts.includes(socket.remoteAddress);
-            return setImmediate(() => callback(null, socketOptions));
+            socketOptions.ignore = this.options.ignoredHosts && this.options.ignoredHosts.includes(socket.remoteAddress as string);
+            setImmediate(() => callback(null, socketOptions));
+            return;
         }
 
-        let chunks = [];
+        let chunks: Buffer[] = [];
         let chunklen = 0;
         let finished = false;
 
-        let onError;
-        let onClose;
-        let onEnd;
-        let socketReader;
+        // assigned below, cleanup() only runs once all of them are set
+        let onError: (err: Error) => void;
+        let onClose: () => void;
+        let onEnd: () => void;
+        let socketReader: () => void;
 
-        let cleanup = () => {
+        let cleanup = (): void => {
             socket.removeListener('readable', socketReader);
             socket.removeListener('error', onError);
             socket.removeListener('close', onClose);
             socket.removeListener('end', onEnd);
         };
 
-        let done = (err, opts) => {
+        let done = (err: Error | null, opts?: SocketOptions): void => {
             if (finished) {
                 return;
             }
@@ -533,7 +621,7 @@ class SMTPServer extends EventEmitter {
             callback(err, opts);
         };
 
-        onError = err => {
+        onError = (err: Error): void => {
             // client may close the connection (RST/FIN) before sending the
             // PROXY header; surface the error through the callback instead of
             // letting it bubble up as an uncaught exception
@@ -550,12 +638,12 @@ class SMTPServer extends EventEmitter {
             done(err);
         };
 
-        onClose = () => {
+        onClose = (): void => {
             // socket closed before a full PROXY header arrived
             done(new Error('Socket closed before PROXY header was received'));
         };
 
-        onEnd = () => {
+        onEnd = (): void => {
             // client half-closed (FIN) before a full PROXY header arrived; with
             // allowHalfOpen the socket emits 'end' but never 'close', so without
             // this the connection would linger until socketTimeout
@@ -564,7 +652,7 @@ class SMTPServer extends EventEmitter {
 
         // reject a malformed/non-PROXY header: deliver the diagnostic to the
         // client (best effort) and surface the failure through the single done()
-        let rejectInvalid = message => {
+        let rejectInvalid = (message?: string): void => {
             try {
                 socket.end('* BAD Invalid PROXY header\r\n');
             } catch {
@@ -573,18 +661,18 @@ class SMTPServer extends EventEmitter {
             return done(new Error(message || 'Invalid PROXY header'));
         };
 
-        socketReader = () => {
-            let chunk;
-            while ((chunk = socket.read()) !== null) {
+        socketReader = (): void => {
+            let chunk: Buffer | null;
+            while ((chunk = socket.read() as Buffer | null) !== null) {
                 for (let i = 0, len = chunk.length; i < len; i++) {
                     let chr = chunk[i];
                     if (chr === 0x0a) {
                         if (chunklen + i + 1 > MAX_PROXY_HEADER_LENGTH) {
                             return rejectInvalid('PROXY header line too long');
                         }
-                        chunks.push(chunk.slice(0, i + 1));
+                        chunks.push(chunk.subarray(0, i + 1));
                         chunklen += i + 1;
-                        let remainder = chunk.slice(i + 1);
+                        let remainder = chunk.subarray(i + 1);
                         if (remainder.length) {
                             socket.unshift(remainder);
                         }
@@ -592,7 +680,7 @@ class SMTPServer extends EventEmitter {
                         let header = Buffer.concat(chunks, chunklen).toString().trim();
 
                         let params = header.split(' ');
-                        let commandName = params.shift().toUpperCase();
+                        let commandName = (params.shift() as string).toUpperCase();
                         if (commandName !== 'PROXY') {
                             return rejectInvalid();
                         }
@@ -658,7 +746,7 @@ class SMTPServer extends EventEmitter {
      *
      * @event
      */
-    _onClientConnect(data) {
+    _onClientConnect(data: SMTPServerEvents['connect'][0]): void {
         this.emit('connect', data);
     }
 
@@ -667,17 +755,18 @@ class SMTPServer extends EventEmitter {
      *
      * @event
      */
-    _normalizeHostname(hostname) {
+    _normalizeHostname(hostname: string): string {
         try {
             hostname = punycode.toUnicode((hostname || '').toString().trim()).toLowerCase();
         } catch (E) {
+            let err = E as Error;
             this.logger.error(
                 {
                     tnx: 'punycode'
                 },
                 'Failed to process punycode domain "%s". error=%s',
                 hostname,
-                E.message
+                err.message
             );
         }
 
@@ -690,17 +779,18 @@ class SMTPServer extends EventEmitter {
      * operator supplied one, or from sniOptions otherwise. Falls back to the default
      * context if no specific one was found
      *
-     * @param {String} servername Server name requested by the client
-     * @param {Function} cb Callback to run with the secure context
+     * @param servername Server name requested by the client
+     * @param cb Callback to run with the secure context
      */
-    _resolveSNI(servername, cb) {
+    _resolveSNI(servername: string, cb: (err: Error | null, ctx?: tls.SecureContext) => void): void {
         servername = this._normalizeHostname(servername);
 
         if (typeof this.options.SNICallback !== 'function') {
             return cb(null, this.secureContext.get(servername) || this.secureContext.get('*'));
         }
 
-        this.options.SNICallback(servername, (err, context) => {
+        // eslint-disable-next-line new-cap
+        this.options.SNICallback(servername, (err: Error | null, context?: tls.SecureContext) => {
             if (err) {
                 this.logger.error(
                     {
@@ -716,8 +806,8 @@ class SMTPServer extends EventEmitter {
         });
     }
 
-    _upgrade(socket, callback) {
-        let socketOptions = {
+    _upgrade(socket: net.Socket, callback: (err: TLSError | null, tlsSocket?: tls.TLSSocket) => void): void {
+        let socketOptions: tls.TLSSocketOptions = {
             secureContext: this.secureContext.get('*'),
             isServer: true,
             server: this.server,
@@ -727,22 +817,19 @@ class SMTPServer extends EventEmitter {
         // The same socket options STARTTLS applies. Without them requestCert and
         // rejectUnauthorized were silently ignored on an implicit TLS listener, so a
         // client certificate was never requested and mutual TLS never enforced there
-        TLS_SOCKET_OPTIONS.forEach(key => {
-            if (key in this.options) {
-                socketOptions[key] = this.options[key];
-            }
-        });
+        copyTLSSocketOptions(this.options, socketOptions);
 
         let returned = false;
-        let tlsSocket;
+        let tlsSocket: tls.TLSSocket | undefined;
 
-        let onError = err => {
+        let onError = (rawErr?: TLSError | null): void => {
             if (returned) {
                 return;
             }
             returned = true;
 
-            const meta = {};
+            let err = rawErr;
+            const meta: TLSErrorMeta = {};
             if (tlsSocket) {
                 meta.tlsProtocol = tlsSocket.getProtocol();
             }
@@ -783,35 +870,39 @@ class SMTPServer extends EventEmitter {
         socket.setTimeout(0);
 
         // upgrade connection
-        tlsSocket = new tls.TLSSocket(socket, socketOptions);
+        const secureSocket = new tls.TLSSocket(socket, socketOptions);
+        tlsSocket = secureSocket;
         if (this._pendingSockets.has(socket)) {
-            this._pendingSockets.set(socket, tlsSocket);
+            this._pendingSockets.set(socket, secureSocket);
         }
 
-        tlsSocket.setTimeout(socketTimeout(this.options), () => {
-            let err = new Error('TLS handshake timeout');
+        secureSocket.setTimeout(socketTimeout(this.options), () => {
+            let err: TLSError = new Error('TLS handshake timeout');
             err.code = 'ERR_TLS_HANDSHAKE_TIMEOUT';
-            tlsSocket.destroy(err);
+            secureSocket.destroy(err);
         });
 
-        tlsSocket.once('close', onError);
-        tlsSocket.once('error', onError);
-        tlsSocket.once('_tlsError', onError);
-        tlsSocket.once('clientError', onError);
-        tlsSocket.once('tlsClientError', onError);
+        // 'close' passes a hadError flag, which is not an error
+        let onClose = (): void => onError();
 
-        tlsSocket.on('secure', () => {
+        secureSocket.once('close', onClose);
+        secureSocket.once('error', onError);
+        secureSocket.once('_tlsError', onError);
+        secureSocket.once('clientError', onError);
+        secureSocket.once('tlsClientError', onError);
+
+        secureSocket.on('secure', () => {
             // SMTPConnection arms its own timeout on the socket it receives
-            tlsSocket.setTimeout(0);
+            secureSocket.setTimeout(0);
             socket.removeListener('error', onError);
-            tlsSocket.removeListener('close', onError);
-            tlsSocket.removeListener('error', onError);
-            tlsSocket.removeListener('_tlsError', onError);
-            tlsSocket.removeListener('clientError', onError);
-            tlsSocket.removeListener('tlsClientError', onError);
+            secureSocket.removeListener('close', onClose);
+            secureSocket.removeListener('error', onError);
+            secureSocket.removeListener('_tlsError', onError);
+            secureSocket.removeListener('clientError', onError);
+            secureSocket.removeListener('tlsClientError', onError);
             if (returned) {
                 try {
-                    tlsSocket.end();
+                    secureSocket.end();
                 } catch {
                     //
                 }
@@ -820,22 +911,24 @@ class SMTPServer extends EventEmitter {
             returned = true;
 
             // a client certificate was asked for and did not pass
-            let verifyError = verifyPeerCertificate(tlsSocket, socketOptions);
+            let verifyError: TLSError | null = verifyPeerCertificate(secureSocket, socketOptions);
             if (verifyError) {
                 verifyError.meta = {
-                    tlsProtocol: tlsSocket.getProtocol(),
+                    tlsProtocol: secureSocket.getProtocol(),
                     protocol: 'smtp',
                     stage: 'connect',
                     remoteAddress: socket.remoteAddress
                 };
-                tlsSocket.destroy();
+                secureSocket.destroy();
                 return callback(verifyError);
             }
 
-            return callback(null, tlsSocket);
+            return callback(null, secureSocket);
         });
     }
 }
 
-// Expose to the world
-module.exports.SMTPServer = SMTPServer;
+// Before the TypeScript build the package was CommonJS only, so a default import of it
+// resolved to the exports object. The default export keeps that working
+const smtpServer = { SMTPServer };
+export default smtpServer;
