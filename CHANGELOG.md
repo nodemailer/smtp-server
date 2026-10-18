@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.20.0](https://github.com/nodemailer/smtp-server/compare/v3.19.24...v3.20.0) (2026-10-18)
+
+
+### Features
+
+* migrate to TypeScript with ES module and CommonJS builds ([aac648c](https://github.com/nodemailer/smtp-server/commit/aac648cd12e501760fd5df653fd7605d49df3e6e))
+
+
+### Bug Fixes
+
+* bump nodemailer to 10.1.5 ([5c7f785](https://github.com/nodemailer/smtp-server/commit/5c7f785096829c64fa2086c9962588787b9ab83e))
+* close the server side of a connection as soon as the client leaves after QUIT ([251a538](https://github.com/nodemailer/smtp-server/commit/251a538a576327b288e7570d4e471dd13256ec1a))
+* harden connection lifecycle, TLS timeouts and the DATA stream ([be9377a](https://github.com/nodemailer/smtp-server/commit/be9377ac16ca90c9bdc7a94b77a37b26473a2504))
+
 ## [3.19.24](https://github.com/nodemailer/smtp-server/compare/v3.19.23...v3.19.24) (2026-10-18)
 
 
