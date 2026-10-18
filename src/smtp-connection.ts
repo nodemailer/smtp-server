@@ -73,6 +73,10 @@ export function copyTLSSocketOptions(options: SMTPServerOptions, socketOptions: 
     });
 }
 
+// Socket errors that mean the client went away. Outside a mail transaction these are
+// the normal way for a connection to end, not something to report
+const QUIET_SOCKET_ERRORS = new Set(['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH']);
+
 // ESMTP parameters that only make sense with a value. _parseAddressCommand stores
 // a bare keyword (or "KEY=") as boolean true, and the code that consumes these
 // treats the value as a string
@@ -436,6 +440,7 @@ export class SMTPConnection extends EventEmitter {
     _closed: boolean;
     _closeTimer?: NodeJS.Timeout | undefined;
     _rcptIndex: Map<string, number> = new Map();
+    _handlerPending = false;
 
     constructor(server: SMTPServer, socket: net.Socket | tls.TLSSocket, options?: SMTPConnectionOptions | null) {
         super();
@@ -612,9 +617,12 @@ export class SMTPConnection extends EventEmitter {
                 }
 
                 this.session.servername = (this._socket as tls.TLSSocket).servername;
-                this._server.onSecure(this._socket, this.session, (err?: Error | null) => {
+                this._server.onSecure(this._socket, this.session, (err?: SMTPServerError | null) => {
                     if (err) {
-                        return this._onError(err);
+                        // refused like a connection that onConnect refuses, a bare error
+                        // would leave the client without a reply until the idle timeout
+                        this.send(err.responseCode || 554, err.message, false);
+                        return this.close();
                     }
                     next();
                 });
@@ -850,7 +858,7 @@ export class SMTPConnection extends EventEmitter {
     _setListeners(callback: () => void): void {
         this._socket.on('close', hadError => this._onCloseEvent(hadError));
         this._socket.on('error', err => this._onError(err));
-        this._socket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
+        this._armTimeout();
         this._socket.pipe(this._parser as SMTPStream);
         if (!this.needsUpgrade) {
             return callback();
@@ -889,8 +897,18 @@ export class SMTPConnection extends EventEmitter {
         }
 
         if (this._dataStream) {
-            this._dataStream.unpipe();
+            let dataStream = this._dataStream;
             this._dataStream = null;
+            // The client went away in the middle of the message. Without this the stream the
+            // onData handler got would never end, and whatever the handler opened for the
+            // message would leak. A message that was received in full is left alone, the
+            // handler may still be reading it. An error is only emitted to a listener, an
+            // unhandled 'error' event would crash the process
+            if (!dataStream.writableEnded && !dataStream.destroyed) {
+                let err: SMTPServerError & { code?: string } = new Error('Connection closed before the message was received in full');
+                err.code = 'ECONNECTION';
+                dataStream.destroy(dataStream.listenerCount('error') ? err : undefined);
+            }
         }
 
         this._server.connections.delete(this);
@@ -937,7 +955,7 @@ export class SMTPConnection extends EventEmitter {
             err.message
         );
 
-        if ((err.code === 'ECONNRESET' || err.code === 'EPIPE') && (!this.session.envelope || !this.session.envelope.mailFrom)) {
+        if (err.code && QUIET_SOCKET_ERRORS.has(err.code) && (!this.session.envelope || !this.session.envelope.mailFrom)) {
             // We got a connection error outside transaction. In most cases it means dirty
             // connection ending by the other party, so we can just ignore it
             this.close(); // mark connection as 'closing'
@@ -961,7 +979,43 @@ export class SMTPConnection extends EventEmitter {
             this._socket.destroy();
             return;
         }
+
+        // The client is idle because it waits for us: an application handler has not
+        // called back yet, or the message is in and the onData handler has not decided
+        // on it. RFC 5321 section 4.5.3.2 has the client wait minutes for these replies,
+        // and timing out here would tell the client to retry a message the application
+        // may still accept, so the idle timeout only counts while the client owes us input
+        if (this._handlerPending || (this._dataStream && this._parser && !this._parser._dataMode)) {
+            this._armTimeout();
+            return;
+        }
+
         this.send(421, 'Timeout - closing connection');
+    }
+
+    /**
+     * Arms the idle timeout of the socket. The listener of socket.setTimeout() runs once,
+     * so this is also how the timeout is kept armed after it fired
+     */
+    _armTimeout(): void {
+        this._socket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
+    }
+
+    /**
+     * Resumes reading commands once the socket has flushed the replies written so far.
+     * A client that pipelines commands without ever reading the replies would otherwise
+     * make the server buffer the replies in memory without a limit
+     *
+     * @param next Callback that resumes the parser
+     */
+    _whenWritable(next: () => void): void {
+        let socket = this._socket;
+        if (socket.writableNeedDrain && !socket.destroyed) {
+            // no need to clean up if the socket closes instead, the parser is closed with it
+            socket.once('drain', next);
+            return;
+        }
+        next();
     }
 
     /**
@@ -985,7 +1039,8 @@ export class SMTPConnection extends EventEmitter {
         );
 
         let handler: CommandHandler | undefined;
-        const done: () => void = callback || (() => false);
+        const next: () => void = callback || (() => false);
+        const done = (): void => this._whenWritable(next);
 
         // Anything that was buffered while the TLS handshake is running arrived in
         // plaintext and must be discarded without a response. NB! this has to be
@@ -1088,8 +1143,10 @@ export class SMTPConnection extends EventEmitter {
         let handlerDone = false;
         let handlerCallback = (): void => {
             handlerDone = true;
+            this._handlerPending = false;
             return done();
         };
+        this._handlerPending = true;
         try {
             handler.call(this, command, handlerCallback);
         } catch (E) {
@@ -2362,6 +2419,8 @@ export class SMTPConnection extends EventEmitter {
             if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
                 this._dataStream.removeAllListeners();
             }
+            // the transaction is over, the connection no longer waits for the onData handler
+            this._dataStream = false;
 
             if (err) {
                 if (this._server.options.lmtp) {
@@ -2407,7 +2466,15 @@ export class SMTPConnection extends EventEmitter {
             // ensure _dataStream is an object and not set to null by premature closing
             // do not continue until the stream has actually ended
             if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
-                this._dataStream.on('end', () => close(err, message));
+                let dataStream = this._dataStream;
+                dataStream.on('end', () => close(err, message));
+                // A handler that decides without reading the message (eg. one that rejects it
+                // right away) never consumes the stream, and a stream that is not read never
+                // emits 'end', so the reply would never be sent. Nothing else reads the rest of
+                // the message then, drain it
+                if (dataStream.readableFlowing === null) {
+                    dataStream.resume();
+                }
                 return;
             }
             close(err, message);
@@ -2612,13 +2679,16 @@ export class SMTPConnection extends EventEmitter {
                 'Connection upgraded to TLS using',
                 cipher || 'N/A'
             );
-            this._server.onSecure(this._socket, this.session, (err?: Error | null) => {
+            this._server.onSecure(this._socket, this.session, (err?: SMTPServerError | null) => {
                 if (!this._parser) {
                     // the client went away while the onSecure handler was running
                     return;
                 }
                 if (err) {
-                    return this._onError(err);
+                    // the TLS session is up but refused, tell the client instead of leaving
+                    // it waiting until the idle timeout
+                    this.send(err.responseCode || 554, err.message);
+                    return this.close();
                 }
                 this._socket.pipe(this._parser);
                 if (typeof secureCallback === 'function') {

@@ -343,8 +343,15 @@ export class SMTPStream extends Writable {
             // write to stream but stop if need to wait for drain
             if (dataStream.writable) {
                 handled = dataStream.write(buf);
-                if (!handled) {
-                    dataStream.once('drain', done);
+                if (!handled && !dataStream.destroyed) {
+                    // a stream that the application destroys never drains, it only closes
+                    let onDrain = (): void => {
+                        dataStream.removeListener('drain', onDrain);
+                        dataStream.removeListener('close', onDrain);
+                        done();
+                    };
+                    dataStream.once('drain', onDrain);
+                    dataStream.once('close', onDrain);
                 } else {
                     return done();
                 }
@@ -374,10 +381,17 @@ export class SMTPStream extends Writable {
      */
     _endDataMode(chunk: Buffer | false, remainder: Buffer, callback: Callback): void {
         const dataStream = this._dataStream as SMTPServerDataStream;
+        let continueNow = false;
         if (this._continueCallback === true) {
             this._continueCallback = false;
-            // wait until the stream is actually over and then continue
-            dataStream.once('end', callback);
+            if (dataStream.destroyed || dataStream.readableEnded) {
+                // continue() came early because the stream was destroyed, it is never going
+                // to emit 'end', so carry on with whatever was pipelined after the message
+                continueNow = true;
+            } else {
+                // wait until the stream is actually over and then continue
+                dataStream.once('end', () => this._write(remainder, 'buffer', callback));
+            }
         } else {
             this._continueCallback = () => this._write(remainder, 'buffer', callback);
         }
@@ -394,5 +408,9 @@ export class SMTPStream extends Writable {
         this._dataMode = false;
         this._remainder = '';
         this._dataStream = null;
+
+        if (continueNow) {
+            this._write(remainder, 'buffer', callback);
+        }
     }
 }

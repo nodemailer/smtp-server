@@ -35,6 +35,9 @@ const CLOSE_TIMEOUT = 30 * 1000; // how much to wait until pending connections a
 // unbounded input from a peer that withholds the terminating newline
 const MAX_PROXY_HEADER_LENGTH = 1024;
 
+// how long a socket whose PROXY header was rejected may stay open for the diagnostic to be delivered
+const PROXY_REJECT_LINGER = 1000;
+
 /** Server options once the constructor has normalized the command and mechanism lists */
 export type SMTPServerResolvedOptions = SMTPServerOptions & {
     disabledCommands: string[];
@@ -616,6 +619,15 @@ export class SMTPServer extends EventEmitter {
                 socket.on('error', () => {
                     // ignore
                 });
+
+                // The pre-connect guard and its timeout go away with this callback, so
+                // nothing else would close a socket whose peer keeps its side open. A
+                // rejected header gets a moment for the "* BAD" line to be flushed
+                if (socket.writableEnded) {
+                    setTimeout(() => socket.destroy(), PROXY_REJECT_LINGER).unref();
+                } else {
+                    socket.destroy();
+                }
             }
             cleanup();
             callback(err, opts);
@@ -876,11 +888,12 @@ export class SMTPServer extends EventEmitter {
             this._pendingSockets.set(socket, secureSocket);
         }
 
-        secureSocket.setTimeout(socketTimeout(this.options), () => {
+        let onHandshakeTimeout = (): void => {
             let err: TLSError = new Error('TLS handshake timeout');
             err.code = 'ERR_TLS_HANDSHAKE_TIMEOUT';
             secureSocket.destroy(err);
-        });
+        };
+        secureSocket.setTimeout(socketTimeout(this.options), onHandshakeTimeout);
 
         // 'close' passes a hadError flag, which is not an error
         let onClose = (): void => onError();
@@ -892,8 +905,10 @@ export class SMTPServer extends EventEmitter {
         secureSocket.once('tlsClientError', onError);
 
         secureSocket.on('secure', () => {
-            // SMTPConnection arms its own timeout on the socket it receives
-            secureSocket.setTimeout(0);
+            // SMTPConnection arms its own timeout on the socket it receives. The listener has
+            // to go as well, setTimeout(0) alone leaves it in place and an idle session would
+            // later be torn down as a failed handshake, with an 'error' on the server
+            secureSocket.setTimeout(0, onHandshakeTimeout);
             socket.removeListener('error', onError);
             secureSocket.removeListener('close', onClose);
             secureSocket.removeListener('error', onError);
