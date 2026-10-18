@@ -138,6 +138,23 @@ describe('Connection lifecycle', () => {
         });
     });
 
+    describe('QUIT', () => {
+        it('lets go of the socket as soon as the client closes its side', async () => {
+            await withServer(plainOptions, async ({ server, port }) => {
+                let client = await RawClient.connect(port);
+                await client.read();
+                assert.strictEqual((await client.command('QUIT'))!.code, 221);
+                assert.strictEqual(await client.read(3000), null, 'the connection is closed');
+                // without reading the FIN the server held the socket until its half-close deadline
+                let start = Date.now();
+                while (await new Promise<number>((resolve, reject) => server.server.getConnections((err, count) => (err ? reject(err) : resolve(count))))) {
+                    assert.ok(Date.now() - start < 1000, 'the server still holds the socket');
+                    await wait(20);
+                }
+            });
+        });
+    });
+
     describe('idle timeout', () => {
         it('does not time out while an application handler is running', async () => {
             await withClient(

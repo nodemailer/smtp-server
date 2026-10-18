@@ -877,6 +877,14 @@ export class SMTPConnection extends EventEmitter {
             this._parser.isClosed = true;
         }
 
+        // Unpiping paused the socket, and a paused socket never reads the FIN of the
+        // client, so the socket would stay open until the deadline below even after a
+        // client that left right after QUIT. Whatever still arrives is discarded. Not
+        // while a TLS handshake runs on top of the socket, the TLS socket reads it then
+        if (!this._upgrading && !this._socket.destroyed) {
+            this._socket.resume();
+        }
+
         // The idle timeout alone does not bound a half-closed socket: any byte the
         // client trickles in resets it, so a client that never closes its side could
         // hold the descriptor for as long as it likes, outside the maxClients limit.
