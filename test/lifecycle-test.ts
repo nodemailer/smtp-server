@@ -3,36 +3,26 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import { Writable } from 'node:stream';
 import tls from 'node:tls';
-import { RawClient, withServer } from './test-client.js';
+import { RawClient, withClient, withServer } from './test-client.js';
 
 // Connection lifecycle: timeouts, socket teardown, back pressure and the data stream
 // when the client or the application does something unexpected
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Resolves once the socket is closed, rejects if that takes longer than the limit
-const closed = (socket: net.Socket, limit: number): Promise<number> => {
-    let start = Date.now();
-    return new Promise((resolve, reject) => {
-        if (socket.destroyed) {
-            return resolve(0);
-        }
-        let timer = setTimeout(() => reject(new Error('socket was not closed within ' + limit + 'ms')), limit);
-        socket.once('close', () => {
-            clearTimeout(timer);
-            resolve(Date.now() - start);
-        });
-    });
+// Settles with the promise, or with the fallback value if that takes longer than ms
+const within = <T, F>(promise: Promise<T>, ms: number, fallback: F): Promise<T | F> => {
+    let timer: NodeJS.Timeout;
+    return Promise.race([promise, new Promise<F>(resolve => (timer = setTimeout(() => resolve(fallback), ms)))]).finally(() => clearTimeout(timer));
 };
 
-const connectTLS = (port: number): Promise<tls.TLSSocket> =>
-    new Promise((resolve, reject) => {
-        let socket = tls.connect({ port, host: '127.0.0.1', rejectUnauthorized: false }, () => {
-            socket.removeListener('error', reject);
-            resolve(socket);
-        });
-        socket.once('error', reject);
-    });
+// Opens a mail transaction and starts its DATA phase
+const openData = async (client: RawClient): Promise<void> => {
+    assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
+    assert.strictEqual((await client.command('MAIL FROM:<sender@example.com>'))!.code, 250);
+    assert.strictEqual((await client.command('RCPT TO:<rcpt@example.com>'))!.code, 250);
+    assert.strictEqual((await client.command('DATA'))!.code, 354);
+};
 
 const plainOptions = { disableReverseLookup: true, authOptional: true, hideSTARTTLS: true };
 
@@ -42,7 +32,7 @@ describe('Connection lifecycle', () => {
             let errors: Error[] = [];
             await withServer({ secure: true, disableReverseLookup: true, authOptional: true, socketTimeout: 500 }, async ({ server, port }) => {
                 server.on('error', err => errors.push(err));
-                let client = new RawClient(await connectTLS(port));
+                let client = await RawClient.connectTLS(port);
                 try {
                     assert.strictEqual((await client.read())!.code, 220);
                     assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
@@ -51,16 +41,12 @@ describe('Connection lifecycle', () => {
                     assert.ok(reply, 'the client got a reply before the connection closed');
                     assert.strictEqual(reply.code, 421);
                     assert.match(reply.text, /Timeout/);
-                    await closed(client.socket, 3000);
+                    assert.strictEqual(await client.read(3000), null, 'the connection is closed');
                 } finally {
                     client.close();
                 }
             });
-            assert.deepStrictEqual(
-                errors.map(err => (err as any).code),
-                [],
-                'no server errors'
-            );
+            assert.strictEqual(errors.length, 0, 'no server errors');
         });
 
         it('refuses the session with a reply when onSecure fails', async () => {
@@ -77,13 +63,13 @@ describe('Connection lifecycle', () => {
                 },
                 async ({ server, port }) => {
                     server.on('error', err => errors.push(err));
-                    let client = new RawClient(await connectTLS(port));
+                    let client = await RawClient.connectTLS(port);
                     try {
                         let reply = await client.read(3000);
                         assert.ok(reply);
                         assert.strictEqual(reply.code, 530);
                         assert.match(reply.text, /Certificate required/);
-                        await closed(client.socket, 3000);
+                        assert.strictEqual(await client.read(3000), null, 'the connection is closed');
                     } finally {
                         client.close();
                     }
@@ -95,7 +81,7 @@ describe('Connection lifecycle', () => {
 
     describe('STARTTLS', () => {
         it('refuses the session with a reply when onSecure fails', async () => {
-            await withServer(
+            await withClient(
                 {
                     disableReverseLookup: true,
                     authOptional: true,
@@ -103,25 +89,19 @@ describe('Connection lifecycle', () => {
                         callback(new Error('TLS session refused'));
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        assert.strictEqual((await client.read())!.code, 220);
-                        assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
-                        assert.strictEqual((await client.command('STARTTLS'))!.code, 220);
+                async client => {
+                    assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
+                    assert.strictEqual((await client.command('STARTTLS'))!.code, 220);
 
-                        let secure = new RawClient(tls.connect({ socket: client.socket, rejectUnauthorized: false }));
-                        try {
-                            let reply = await secure.read(3000);
-                            assert.ok(reply);
-                            assert.strictEqual(reply.code, 554);
-                            assert.match(reply.text, /TLS session refused/);
-                            await closed(secure.socket, 3000);
-                        } finally {
-                            secure.close();
-                        }
+                    let secure = new RawClient(tls.connect({ socket: client.socket, rejectUnauthorized: false }));
+                    try {
+                        let reply = await secure.read(3000);
+                        assert.ok(reply);
+                        assert.strictEqual(reply.code, 554);
+                        assert.match(reply.text, /TLS session refused/);
+                        assert.strictEqual(await secure.read(3000), null, 'the connection is closed');
                     } finally {
-                        client.close();
+                        secure.close();
                     }
                 }
             );
@@ -160,82 +140,56 @@ describe('Connection lifecycle', () => {
 
     describe('idle timeout', () => {
         it('does not time out while an application handler is running', async () => {
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
-                    socketTimeout: 300,
+                    socketTimeout: 200,
                     onMailFrom(address, session, callback) {
-                        setTimeout(callback, 1000);
+                        setTimeout(callback, 600);
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
-                        assert.strictEqual((await client.command('MAIL FROM:<sender@example.com>', 5000))!.code, 250);
-                        // and the timeout still applies once the server is waiting for the client again
-                        let reply = await client.read(3000);
-                        assert.strictEqual(reply!.code, 421);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    assert.strictEqual((await client.command('EHLO client.example.com'))!.code, 250);
+                    assert.strictEqual((await client.command('MAIL FROM:<sender@example.com>', 5000))!.code, 250);
+                    // and the timeout still applies once the server is waiting for the client again
+                    assert.strictEqual((await client.read(3000))!.code, 421);
                 }
             );
         });
 
         it('does not time out while the onData handler decides on a received message', async () => {
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
-                    socketTimeout: 300,
+                    socketTimeout: 200,
                     onData(stream, session, callback) {
                         stream.resume();
-                        stream.on('end', () => setTimeout(() => callback(null, 'Queued after a while'), 1000));
+                        stream.on('end', () => setTimeout(() => callback(null, 'Queued after a while'), 600));
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        await client.command('EHLO client.example.com');
-                        await client.command('MAIL FROM:<sender@example.com>');
-                        await client.command('RCPT TO:<rcpt@example.com>');
-                        assert.strictEqual((await client.command('DATA'))!.code, 354);
-                        let reply = await client.command('Subject: test\r\n\r\nHello\r\n.', 5000);
-                        assert.strictEqual(reply!.code, 250);
-                        assert.match(reply!.text, /Queued after a while/);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    await openData(client);
+                    let reply = await client.command('Subject: test\r\n\r\nHello\r\n.', 5000);
+                    assert.strictEqual(reply!.code, 250);
+                    assert.match(reply!.text, /Queued after a while/);
                 }
             );
         });
 
         it('still times out a client that stops sending in the middle of a message', async () => {
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
-                    socketTimeout: 300,
+                    socketTimeout: 200,
                     onData(stream, session, callback) {
                         stream.resume();
                         stream.on('end', () => callback());
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        await client.command('EHLO client.example.com');
-                        await client.command('MAIL FROM:<sender@example.com>');
-                        await client.command('RCPT TO:<rcpt@example.com>');
-                        assert.strictEqual((await client.command('DATA'))!.code, 354);
-                        client.write('Subject: test\r\n\r\nHello');
-                        let reply = await client.read(3000);
-                        assert.strictEqual(reply!.code, 421);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    await openData(client);
+                    client.write('Subject: test\r\n\r\nHello');
+                    assert.strictEqual((await client.read(3000))!.code, 421);
                 }
             );
         });
@@ -249,7 +203,9 @@ describe('Connection lifecycle', () => {
                 await new Promise(resolve => socket.once('connect', resolve));
                 // the client never reads anything
                 socket.pause();
-                await wait(300);
+                while (!server.connections.size) {
+                    await wait(10);
+                }
 
                 let connection: any = [...server.connections][0];
                 let maxBuffered = 0;
@@ -257,15 +213,18 @@ describe('Connection lifecycle', () => {
                     maxBuffered = Math.max(maxBuffered, connection._socket.writableLength);
                 }, 5);
 
+                // past the greeting delay, commands sent before it are refused as early talk
+                await wait(150);
+
                 // 2 MB of pipelined EHLO commands, each one answered with a multi-line reply
                 // some 15 times its size
                 let batch = Buffer.from('EHLO a\r\n'.repeat(10 * 1000));
                 for (let i = 0; i < 25; i++) {
                     if (!socket.write(batch)) {
-                        await Promise.race([new Promise(resolve => socket.once('drain', resolve)), wait(200)]);
+                        await within(new Promise(resolve => socket.once('drain', resolve)), 200, null);
                     }
                 }
-                await wait(500);
+                await wait(300);
                 clearInterval(sampler);
                 socket.destroy();
 
@@ -278,7 +237,7 @@ describe('Connection lifecycle', () => {
 
     describe('data stream', () => {
         it('replies when the onData handler rejects the message without reading it', async () => {
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
                     socketTimeout: 5000,
@@ -288,28 +247,18 @@ describe('Connection lifecycle', () => {
                         callback(err);
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        await client.command('EHLO client.example.com');
-                        await client.command('MAIL FROM:<sender@example.com>');
-                        await client.command('RCPT TO:<rcpt@example.com>');
-                        assert.strictEqual((await client.command('DATA'))!.code, 354);
-                        // larger than the buffers of the data stream
-                        client.write(('x'.repeat(76) + '\r\n').repeat(4000));
-                        let reply = await client.command('.', 2000);
-                        assert.strictEqual(reply!.code, 550);
-                        assert.strictEqual((await client.command('QUIT'))!.code, 221);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    await openData(client);
+                    // larger than the buffers of the data stream
+                    client.write(('x'.repeat(76) + '\r\n').repeat(4000));
+                    assert.strictEqual((await client.command('.', 2000))!.code, 550);
+                    assert.strictEqual((await client.command('QUIT'))!.code, 221);
                 }
             );
         });
 
         it('carries on with pipelined commands when the onData handler destroyed the stream', async () => {
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
                     socketTimeout: 5000,
@@ -322,30 +271,21 @@ describe('Connection lifecycle', () => {
                         });
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        await client.command('EHLO client.example.com');
-                        await client.command('MAIL FROM:<sender@example.com>');
-                        await client.command('RCPT TO:<rcpt@example.com>');
-                        assert.strictEqual((await client.command('DATA'))!.code, 354);
-                        client.write('Subject: test\r\n\r\n');
-                        await wait(100);
-                        client.write('Hello\r\n.\r\nNOOP\r\nQUIT\r\n');
-                        assert.strictEqual((await client.read(2000))!.code, 552);
-                        assert.strictEqual((await client.read(2000))!.code, 250);
-                        assert.strictEqual((await client.read(2000))!.code, 221);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    await openData(client);
+                    client.write('Subject: test\r\n\r\n');
+                    await wait(100);
+                    client.write('Hello\r\n.\r\nNOOP\r\nQUIT\r\n');
+                    assert.strictEqual((await client.read(2000))!.code, 552);
+                    assert.strictEqual((await client.read(2000))!.code, 250);
+                    assert.strictEqual((await client.read(2000))!.code, 221);
                 }
             );
         });
 
         it('ends the data stream with an error when the client disconnects in the middle of a message', async () => {
             let streamError: Promise<any>;
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
                     onData(stream, session, callback) {
@@ -359,17 +299,12 @@ describe('Connection lifecycle', () => {
                         stream.resume();
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    await client.read();
-                    await client.command('EHLO client.example.com');
-                    await client.command('MAIL FROM:<sender@example.com>');
-                    await client.command('RCPT TO:<rcpt@example.com>');
-                    assert.strictEqual((await client.command('DATA'))!.code, 354);
+                async client => {
+                    await openData(client);
                     client.write('Subject: test\r\n\r\nHello');
                     await wait(100);
                     client.close();
-                    let err = await Promise.race([streamError!, wait(3000).then(() => 'timeout')]);
+                    let err = await within(streamError!, 3000, 'timeout');
                     assert.ok(err instanceof Error, 'the stream emitted an error, got ' + err);
                     assert.strictEqual((err as any).code, 'ECONNECTION');
                 }
@@ -378,7 +313,7 @@ describe('Connection lifecycle', () => {
 
         it('closes the data stream without an error event when nothing listens for one', async () => {
             let streamClosed: Promise<string>;
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
                     onData(stream) {
@@ -386,17 +321,12 @@ describe('Connection lifecycle', () => {
                         stream.resume();
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    await client.read();
-                    await client.command('EHLO client.example.com');
-                    await client.command('MAIL FROM:<sender@example.com>');
-                    await client.command('RCPT TO:<rcpt@example.com>');
-                    assert.strictEqual((await client.command('DATA'))!.code, 354);
+                async client => {
+                    await openData(client);
                     client.write('Subject: test\r\n\r\nHello');
                     await wait(100);
                     client.close();
-                    assert.strictEqual(await Promise.race([streamClosed!, wait(3000).then(() => 'timeout')]), 'closed');
+                    assert.strictEqual(await within(streamClosed!, 3000, 'timeout'), 'closed');
                 }
             );
         });
@@ -404,7 +334,7 @@ describe('Connection lifecycle', () => {
         it('lets the onData handler finish reading a message the client sent in full before leaving', async () => {
             let message = ('y'.repeat(76) + '\r\n').repeat(5000);
             let delivered: Promise<number>;
-            await withServer(
+            await withClient(
                 {
                     ...plainOptions,
                     onData(stream, session, callback) {
@@ -426,17 +356,11 @@ describe('Connection lifecycle', () => {
                         });
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    await client.read();
-                    await client.command('EHLO client.example.com');
-                    await client.command('MAIL FROM:<sender@example.com>');
-                    await client.command('RCPT TO:<rcpt@example.com>');
-                    assert.strictEqual((await client.command('DATA'))!.code, 354);
+                async client => {
+                    await openData(client);
                     client.write(message + '.\r\nQUIT\r\n');
                     client.socket.end();
-                    let length = await Promise.race([delivered!, wait(10 * 1000).then(() => -1)]);
-                    assert.strictEqual(length, message.length);
+                    assert.strictEqual(await within(delivered!, 10 * 1000, -1), message.length);
                 }
             );
         });
@@ -452,17 +376,20 @@ describe('Connection lifecycle', () => {
                     };
                 });
                 let client = await RawClient.connect(port);
-                await client.read();
-                await client.command('QUIT');
-                client.close();
+                try {
+                    await client.read();
+                    await client.command('QUIT');
+                } finally {
+                    client.close();
+                }
                 assert.strictEqual(await callbackType, 'function');
             });
         });
 
         it('uses a custom resolver for the reverse lookup', async () => {
             let lookups: string[] = [];
-            let hostname: Promise<string>;
-            await withServer(
+            let hostname: string | undefined;
+            await withClient(
                 {
                     authOptional: true,
                     resolver: {
@@ -472,42 +399,30 @@ describe('Connection lifecycle', () => {
                         }
                     },
                     onConnect(session, callback) {
-                        hostname = Promise.resolve(session.clientHostname);
+                        hostname = session.clientHostname;
                         callback();
                     }
                 },
-                async ({ port }) => {
-                    let client = await RawClient.connect(port);
-                    try {
-                        await client.read();
-                        assert.deepStrictEqual(lookups, ['127.0.0.1']);
-                        assert.strictEqual(await hostname!, 'client.resolver.example.com');
-                        let reply = await client.command('EHLO client.example.com');
-                        assert.match(reply!.lines[0], /client\.resolver\.example\.com/);
-                    } finally {
-                        client.close();
-                    }
+                async client => {
+                    assert.deepStrictEqual(lookups, ['127.0.0.1']);
+                    assert.strictEqual(hostname, 'client.resolver.example.com');
+                    let reply = await client.command('EHLO client.example.com');
+                    assert.match(reply!.lines[0], /client\.resolver\.example\.com/);
                 }
             );
         });
 
         it('treats network errors outside a transaction as a disconnect, not a server error', async () => {
             let errors: Error[] = [];
-            await withServer(plainOptions, async ({ server, port }) => {
+            await withClient(plainOptions, async (client, greeting, server) => {
                 server.on('error', err => errors.push(err));
-                let client = await RawClient.connect(port);
-                try {
-                    await client.read();
-                    let connection: any = [...server.connections][0];
-                    for (let code of ['ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH']) {
-                        let err: any = new Error('network error');
-                        err.code = code;
-                        connection._onError(err);
-                    }
-                    await closed(client.socket, 3000);
-                } finally {
-                    client.close();
+                let connection: any = [...server.connections][0];
+                for (let code of ['ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH']) {
+                    let err: any = new Error('network error');
+                    err.code = code;
+                    connection._onError(err);
                 }
+                assert.strictEqual(await client.read(3000), null, 'the connection is closed');
             });
             assert.strictEqual(errors.length, 0);
         });

@@ -3,6 +3,7 @@
 
 import net from 'node:net';
 import type { AddressInfo } from 'node:net';
+import tls from 'node:tls';
 import { SMTPServer, type SMTPServerOptions } from '../src/smtp-server.js';
 
 /** A validated reply block */
@@ -175,6 +176,19 @@ export class RawClient {
     static connect(port: number): Promise<RawClient> {
         return new Promise((resolve, reject) => {
             let socket = net.connect(port, '127.0.0.1', () => {
+                socket.removeListener('error', reject);
+                resolve(new RawClient(socket));
+            });
+            socket.once('error', reject);
+        });
+    }
+
+    /**
+     * Connects with implicit TLS, the certificate is not verified
+     */
+    static connectTLS(port: number): Promise<RawClient> {
+        return new Promise((resolve, reject) => {
+            let socket = tls.connect({ port, host: '127.0.0.1', rejectUnauthorized: false }, () => {
                 socket.removeListener('error', reject);
                 resolve(new RawClient(socket));
             });

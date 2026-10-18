@@ -262,17 +262,10 @@ const typeCheckConsumer = (sources: string | string[], compilerOptions: { [key: 
 };
 
 describe('Built package types', { timeout: 120 * 1000, skip: hasDist ? false : 'dist/ is not built, run npm run build first' }, () => {
+    // one compiler run per resolution keeps the suite fast, tsc names the consumer file that fails
     for (const resolution of resolutions) {
-        it('type-checks a consumer written against the earlier declarations with ' + resolution.name, () => {
-            typeCheckConsumer(consumer, resolution.compilerOptions, resolution.type);
-        });
-
-        it('type-checks the default import and the deep imports with ' + resolution.name, () => {
-            typeCheckConsumer(defaultAndDeepImports, resolution.compilerOptions, resolution.type);
-        });
-
-        it('accepts explicit undefined for every optional property with ' + resolution.name, () => {
-            typeCheckConsumer(exactOptionalConsumer, resolution.compilerOptions, resolution.type);
+        it('type-checks consumer code, the default and deep imports, and explicit undefined options with ' + resolution.name, () => {
+            typeCheckConsumer([consumer, defaultAndDeepImports, exactOptionalConsumer], resolution.compilerOptions, resolution.type);
         });
     }
 

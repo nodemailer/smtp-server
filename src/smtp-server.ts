@@ -6,13 +6,13 @@ import { getLogger, type Logger } from 'nodemailer/lib/shared';
 import punycode from 'punycode.js';
 import {
     SMTPConnection,
-    copyTLSSocketOptions,
+    createTLSSocketOptions,
     isAddressAllowed,
+    normalizeTLSError,
     socketTimeout,
     verifyPeerCertificate,
     type SMTPConnectionOptions,
-    type TLSError,
-    type TLSErrorMeta
+    type TLSError
 } from './smtp-connection.js';
 import tlsOptions from './tls-options.js';
 import type {
@@ -150,53 +150,36 @@ export class SMTPServer extends EventEmitter {
         this._pendingSockets = new Map();
 
         // setup server listener and connection handler
-        if (this.options.secure && !this.options.needsUpgrade) {
-            this.server = net.createServer(this.options, socket => {
-                // the TLS handshake is still ahead unless an external terminator did it
-                let release = this._acceptSocket(socket, !this.options.secured);
-                if (!release) {
+        let implicitTLS = !!(this.options.secure && !this.options.needsUpgrade);
+        this.server = net.createServer(this.options, socket => {
+            // the TLS handshake of an implicit TLS listener is still ahead, unless an external terminator did it
+            let handshake = implicitTLS && !this.options.secured;
+            let release = this._acceptSocket(socket, handshake);
+            if (!release) {
+                return;
+            }
+            this._handleProxy(socket, (err, socketOptions) => {
+                if (err || !handshake) {
+                    release();
+                    // a PROXY header that could not be read (client dropped the connection or
+                    // sent garbage) leaves the socket closing, guarded against late errors in
+                    // _handleProxy, so it does not proceed to connect()
+                    if (!err) {
+                        this.connect(socket, socketOptions);
+                    }
                     return;
                 }
-                this._handleProxy(socket, (err, socketOptions) => {
-                    if (err) {
-                        // PROXY header could not be read (client dropped the
-                        // connection or sent garbage). The socket is already
-                        // closing/closed and guarded against late errors in
-                        // _handleProxy; just don't proceed to connect().
-                        return release();
-                    }
-                    if (this.options.secured) {
-                        release();
-                        return this.connect(socket, socketOptions);
-                    }
-                    this._upgrade(socket, (err, tlsSocket) => {
-                        release();
-                        if (err) {
-                            // the guard is gone, so make sure a failed handshake does not leave the socket open
-                            socket.destroy();
-                            return this._onError(err);
-                        }
-                        this.connect(tlsSocket as tls.TLSSocket, socketOptions);
-                    });
-                });
-            });
-        } else {
-            this.server = net.createServer(this.options, socket => {
-                let release = this._acceptSocket(socket, false);
-                if (!release) {
-                    return;
-                }
-                this._handleProxy(socket, (err, socketOptions) => {
+                this._upgrade(socket, (err, tlsSocket) => {
                     release();
                     if (err) {
-                        // socket already closing/closed and guarded in
-                        // _handleProxy; just don't proceed to connect()
-                        return;
+                        // the guard is gone, so make sure a failed handshake does not leave the socket open
+                        socket.destroy();
+                        return this._onError(err);
                     }
-                    this.connect(socket, socketOptions);
+                    this.connect(tlsSocket as tls.TLSSocket, socketOptions);
                 });
             });
-        }
+        });
 
         this._setListeners();
     }
@@ -401,9 +384,7 @@ export class SMTPServer extends EventEmitter {
      * @param [options] TLS options to apply
      */
     updateSecureContext(options?: tls.TlsOptions | SMTPServerOptions | null): void {
-        Object.keys(options || {}).forEach(key => {
-            (this.options as unknown as Record<string, unknown>)[key] = (options as unknown as Record<string, unknown>)[key];
-        });
+        Object.assign(this.options, options);
 
         let defaultTlsOptions = tlsOptions(this.options);
 
@@ -819,17 +800,10 @@ export class SMTPServer extends EventEmitter {
     }
 
     _upgrade(socket: net.Socket, callback: (err: TLSError | null, tlsSocket?: tls.TLSSocket) => void): void {
-        let socketOptions: tls.TLSSocketOptions = {
-            secureContext: this.secureContext.get('*'),
-            isServer: true,
-            server: this.server,
-            SNICallback: (servername, cb) => this._resolveSNI(servername, cb)
-        };
-
         // The same socket options STARTTLS applies. Without them requestCert and
         // rejectUnauthorized were silently ignored on an implicit TLS listener, so a
         // client certificate was never requested and mutual TLS never enforced there
-        copyTLSSocketOptions(this.options, socketOptions);
+        let socketOptions = createTLSSocketOptions(this);
 
         let returned = false;
         let tlsSocket: tls.TLSSocket | undefined;
@@ -840,35 +814,7 @@ export class SMTPServer extends EventEmitter {
             }
             returned = true;
 
-            let err = rawErr;
-            const meta: TLSErrorMeta = {};
-            if (tlsSocket) {
-                meta.tlsProtocol = tlsSocket.getProtocol();
-            }
-            meta.protocol = 'smtp';
-            meta.stage = 'connect';
-            meta.remoteAddress = socket.remoteAddress;
-
-            if (err) {
-                err.meta = meta;
-            }
-
-            if (err && /SSL[23]*_GET_CLIENT_HELLO|ssl[23]*_read_bytes|ssl_bytes_to_cipher_list/i.test(err.message)) {
-                let message = err.message;
-                err.message = 'Failed to establish TLS session';
-                err.responseCode = 500;
-                err.code = err.code || 'TLSError';
-                meta.message = message;
-            }
-            if (!err || !err.message) {
-                err = new Error('Socket closed while initiating TLS');
-                err.responseCode = 500;
-                err.code = 'SocketError';
-                err.report = false;
-                err.meta = meta;
-            }
-
-            callback(err || new Error('Socket closed unexpectedly'));
+            callback(normalizeTLSError(rawErr, tlsSocket, socket.remoteAddress));
         };
 
         // remove all listeners from the original socket besides the error handler

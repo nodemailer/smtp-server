@@ -17,7 +17,6 @@ import type {
     SMTPServerDataStream,
     SMTPServerEnvelopeDSN,
     SMTPServerError,
-    SMTPServerOptions,
     SMTPServerSession
 } from './types.js';
 
@@ -59,18 +58,74 @@ export interface TLSError extends Error {
 }
 
 /**
- * Copies the TLS_SOCKET_OPTIONS that are set in the server options onto the options of
- * a TLS socket the server creates itself
+ * Options for a TLS socket the server creates itself on top of an accepted socket, for
+ * STARTTLS and implicit TLS alike: the default context, SNI through the server, and
+ * the TLS_SOCKET_OPTIONS that are set in the server options
  *
- * @param options Server options
- * @param socketOptions TLS socket options to extend
+ * @internal
+ * @param server Server the socket belongs to
+ * @returns TLS socket options
  */
-export function copyTLSSocketOptions(options: SMTPServerOptions, socketOptions: tls.TLSSocketOptions): void {
+export function createTLSSocketOptions(server: SMTPServer): tls.TLSSocketOptions {
+    let socketOptions: tls.TLSSocketOptions = {
+        secureContext: server.secureContext.get('*'),
+        isServer: true,
+        server: server.server,
+        SNICallback: (servername, cb) => server._resolveSNI(servername, cb)
+    };
+
+    // Without requestCert and rejectUnauthorized a client certificate is never asked for
     TLS_SOCKET_OPTIONS.forEach(key => {
-        if (key in options) {
-            (socketOptions as Record<string, unknown>)[key] = (options as Record<string, unknown>)[key];
+        if (key in server.options) {
+            (socketOptions as Record<string, unknown>)[key] = (server.options as unknown as Record<string, unknown>)[key];
         }
     });
+
+    return socketOptions;
+}
+
+/**
+ * Turns whatever ended a TLS handshake (an error, or nothing when the socket just
+ * closed) into the error the library reports, with the details in err.meta
+ *
+ * @internal
+ * @param rawErr Error of the TLS socket, if there was one
+ * @param tlsSocket The TLS socket, if it was created
+ * @param remoteAddress Client address to add to the details
+ * @returns Error to report
+ */
+export function normalizeTLSError(rawErr: TLSError | null | undefined, tlsSocket?: tls.TLSSocket, remoteAddress?: string): TLSError {
+    let err = rawErr;
+    const meta: TLSErrorMeta = {};
+    if (tlsSocket) {
+        meta.tlsProtocol = tlsSocket.getProtocol();
+    }
+    meta.protocol = 'smtp';
+    meta.stage = 'connect';
+    if (remoteAddress !== undefined) {
+        meta.remoteAddress = remoteAddress;
+    }
+
+    if (err) {
+        err.meta = meta;
+    }
+
+    if (err && /SSL[23]*_GET_CLIENT_HELLO|ssl[23]*_read_bytes|ssl_bytes_to_cipher_list/i.test(err.message)) {
+        let message = err.message;
+        err.message = 'Failed to establish TLS session';
+        err.responseCode = 500;
+        err.code = err.code || 'TLSError';
+        meta.message = message;
+    }
+    if (!err || !err.message) {
+        err = new Error('Socket closed while initiating TLS');
+        err.responseCode = 500;
+        err.code = 'SocketError';
+        err.report = false;
+        err.meta = meta;
+    }
+
+    return err;
 }
 
 // Socket errors that mean the client went away. Outside a mail transaction these are
@@ -621,8 +676,7 @@ export class SMTPConnection extends EventEmitter {
                     if (err) {
                         // refused like a connection that onConnect refuses, a bare error
                         // would leave the client without a reply until the idle timeout
-                        this.send(err.responseCode || 554, err.message, false);
-                        return this.close();
+                        return this._refuse(err, false);
                     }
                     next();
                 });
@@ -641,8 +695,7 @@ export class SMTPConnection extends EventEmitter {
                 );
 
                 if (err) {
-                    this.send(err.responseCode || 554, err.message, false);
-                    return this.close();
+                    return this._refuse(err, false);
                 }
 
                 onSecureIfNeeded(() => {
@@ -780,6 +833,17 @@ export class SMTPConnection extends EventEmitter {
             // the connection still has to go away even if the response was suppressed
             this.close();
         }
+    }
+
+    /**
+     * Refuses the session with the reply of an application handler error and closes the connection
+     *
+     * @param err Error from onConnect or onSecure, err.responseCode sets the reply code (554 by default)
+     * @param [context] Context for enhanced status codes, false for none
+     */
+    _refuse(err: SMTPServerError, context?: string | false): void {
+        this.send(err.responseCode || 554, err.message, context);
+        this.close();
     }
 
     /**
@@ -996,9 +1060,11 @@ export class SMTPConnection extends EventEmitter {
     /**
      * Arms the idle timeout of the socket. The listener of socket.setTimeout() runs once,
      * so this is also how the timeout is kept armed after it fired
+     *
+     * @param [socket] Socket to arm, the current one of the connection by default
      */
-    _armTimeout(): void {
-        this._socket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
+    _armTimeout(socket: net.Socket = this._socket): void {
+        socket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
     }
 
     /**
@@ -2416,7 +2482,7 @@ export class SMTPConnection extends EventEmitter {
                 parser.dataBytes
             );
 
-            if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
+            if (this._dataStream && this._dataStream.readable) {
                 this._dataStream.removeAllListeners();
             }
             // the transaction is over, the connection no longer waits for the onData handler
@@ -2457,7 +2523,7 @@ export class SMTPConnection extends EventEmitter {
             this._unrecognizedCommands = 0; // reset unrecognized commands counter
             this._resetSession(); // reset session state
 
-            if (typeof this._parser === 'object' && this._parser) {
+            if (this._parser) {
                 this._parser.continue();
             }
         };
@@ -2465,7 +2531,7 @@ export class SMTPConnection extends EventEmitter {
         this._server.onData(this._dataStream, this.session, (err?: SMTPServerError | null, message?: string | SMTPServerDataResult[]) => {
             // ensure _dataStream is an object and not set to null by premature closing
             // do not continue until the stream has actually ended
-            if (typeof this._dataStream === 'object' && this._dataStream && this._dataStream.readable) {
+            if (this._dataStream && this._dataStream.readable) {
                 let dataStream = this._dataStream;
                 dataStream.on('end', () => close(err, message));
                 // A handler that decides without reading the message (eg. one that rejects it
@@ -2568,32 +2634,7 @@ export class SMTPConnection extends EventEmitter {
         let secureSocket: tls.TLSSocket | undefined;
 
         let onError = (rawErr?: TLSError | null): void => {
-            let err = rawErr;
-            const meta: TLSErrorMeta = {};
-            if (secureSocket) {
-                meta.tlsProtocol = secureSocket.getProtocol();
-            }
-            meta.protocol = 'smtp';
-            meta.stage = 'connect';
-
-            if (err) {
-                err.meta = meta;
-            }
-
-            if (err && /SSL[23]*_GET_CLIENT_HELLO|ssl[23]*_read_bytes|ssl_bytes_to_cipher_list/i.test(err.message)) {
-                let message = err.message;
-                err.message = 'Failed to establish TLS session';
-                err.responseCode = 500;
-                err.code = err.code || 'TLSError';
-                meta.message = message;
-            }
-            if (!err || !err.message) {
-                err = new Error('Socket closed while initiating TLS');
-                err.responseCode = 500;
-                err.code = 'SocketError';
-                err.report = false;
-                err.meta = meta;
-            }
+            let err = normalizeTLSError(rawErr, secureSocket);
 
             // Node tears the socket down itself after a failed handshake, Bun does not,
             // and a connection whose upgrade failed has nothing left to do. The raw socket
@@ -2608,17 +2649,7 @@ export class SMTPConnection extends EventEmitter {
             this._onError(err);
         };
 
-        let secureContext = this._server.secureContext.get('*');
-        let socketOptions: tls.TLSSocketOptions = {
-            secureContext,
-            isServer: true,
-            server: this._server.server,
-
-            SNICallback: (servername, cb) => this._server._resolveSNI(servername, cb)
-        };
-
-        // Apply additional socket options if these are set in the server options
-        copyTLSSocketOptions(this._server.options, socketOptions);
+        let socketOptions = createTLSSocketOptions(this._server);
 
         // remove all listeners from the original socket besides the error handler
         this._socket.removeAllListeners();
@@ -2633,7 +2664,7 @@ export class SMTPConnection extends EventEmitter {
         tlsSocket.once('_tlsError', (err: TLSError) => onError(err));
         tlsSocket.once('clientError', (err: TLSError) => onError(err));
 
-        tlsSocket.setTimeout(socketTimeout(this._server.options), () => this._onTimeout());
+        this._armTimeout(tlsSocket);
 
         // NB! once() and not on(): a TLS 1.2 client can renegotiate at any time, which
         // makes the socket emit 'secure' again. Re-running this would pipe the socket
@@ -2687,8 +2718,7 @@ export class SMTPConnection extends EventEmitter {
                 if (err) {
                     // the TLS session is up but refused, tell the client instead of leaving
                     // it waiting until the idle timeout
-                    this.send(err.responseCode || 554, err.message);
-                    return this.close();
+                    return this._refuse(err);
                 }
                 this._socket.pipe(this._parser);
                 if (typeof secureCallback === 'function') {
