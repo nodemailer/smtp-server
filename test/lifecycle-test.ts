@@ -144,6 +144,9 @@ describe('Connection lifecycle', () => {
                 let client = await RawClient.connect(port);
                 await client.read();
                 assert.strictEqual((await client.command('QUIT'))!.code, 221);
+                // input that arrives once the server has stopped parsing stayed unread on the
+                // paused socket, and the FIN behind it with it
+                client.write('NOOP\r\n');
                 assert.strictEqual(await client.read(3000), null, 'the connection is closed');
                 // without reading the FIN the server held the socket until its half-close deadline
                 let start = Date.now();
