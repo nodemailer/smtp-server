@@ -36,6 +36,10 @@ jobs:
             - name: Test with coverage check
               if: matrix.node == '24.x'
               run: npm run test:coverage
+            # Node 22+ can require() an ES module, which would hide an ESM-only dependency from the
+            # suite. EmailEngine's pkg binary cannot load one, so the CommonJS build is loaded with that off
+            - run: npm run test:cjs
+              if: matrix.node == '22.x' || matrix.node == '24.x'
 
     # smtp-server is the test server of nodemailer, which also runs under Bun,
     # so the ES module build and the same test suite are run under the latest Bun release as well

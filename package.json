@@ -43,6 +43,8 @@
         "test": "node --import tsx --test --test-force-exit --test-concurrency=1 --test-timeout=60000 $(find test -name '*-test.ts')",
         "pretest:coverage": "npm run build",
         "test:coverage": "c8 node --import tsx --test --test-force-exit --test-concurrency=1 --test-timeout=60000 $(find test -name '*-test.ts')",
+        "pretest:cjs": "npm run build",
+        "test:cjs": "NODE_OPTIONS=--no-experimental-require-module node test/cjs-smoke.cjs",
         "pretest:bun": "npm run build",
         "test:bun": "bun test --timeout 60000 $(find ./test -name '*-test.ts')",
         "compare": "node --import tsx compare/compare.ts",
