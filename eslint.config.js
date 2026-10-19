@@ -27,6 +27,7 @@ export default defineConfig([
         rules: {
             // Error detection
             'for-direction': 'error',
+            'no-await-in-loop': 'error',
             'no-div-regex': 'error',
             eqeqeq: 'error',
             'dot-notation': 'error',
@@ -134,6 +135,14 @@ export default defineConfig([
             '@typescript-eslint/no-deprecated': 'error',
             // `void promise;` marks a promise that is deliberately left unawaited
             'no-void': ['error', { allowAsStatement: true }]
+        }
+    },
+    {
+        // Repo-specific: the tests poll and the compare tool replays protocol steps one at a time,
+        // sequential on purpose (10 violations, none under src/)
+        files: ['test/**', 'compare/**'],
+        rules: {
+            'no-await-in-loop': 'off'
         }
     },
     prettier
