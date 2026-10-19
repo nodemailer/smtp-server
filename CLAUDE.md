@@ -70,6 +70,7 @@ This package has intentionally few runtime dependencies. Keep it that way.
 npm test               # Build, then run the full suite with the Node.js test runner
 npm run test:coverage  # Same suite under c8 (thresholds in .c8rc.json, CI on Node 24)
 npm run test:bun       # Build, then the suite under Bun (CI runs the latest Bun release)
+npm run test:cjs       # Build, then require() the CommonJS build without require(esm) and deliver a message
 npm run lint           # tsc --noEmit over src/ and test/, then ESLint
 npm run typecheck      # tsc --noEmit only
 npm run build          # Produce dist/
@@ -157,23 +158,38 @@ Single file: `node --import tsx --test test/protocol-test.ts`.
   affect the published library, which ships none of the dev dependencies. Prefer
   real upstream fixes over `npm audit fix --force`.
 
-## @yao-pkg/pkg Compatibility (important)
+## Platform constraints (important)
 
 Our applications (e.g. EmailEngine) are packaged into self-contained
 single-file executables with **[@yao-pkg/pkg](https://github.com/yao-pkg/pkg)**.
 `pkg` bundles CommonJS into a V8 snapshot and **cannot handle pure ESM
 modules**. Because `smtp-server` and its dependency tree are bundled into those
-executables, this package and everything it pulls in at runtime must stay
-`pkg`-compatible:
+executables, two rules apply:
+
+- **Node.js 20 is the minimum supported version.** Runtime code, tests and
+  tooling must work on Node 20, 22 and 24 (`engines.node` is `>=20.0.0`,
+  `@types/node` stays on the 20.x line).
+- **Everything that reaches runtime must be genuinely CommonJS-loadable.**
+  `require()` of the CommonJS build and of every runtime dependency, transitive
+  ones included, must work with `--no-experimental-require-module`. Node 22+ (and
+  20.19) can `require()` an ES module by default, which hides an ESM-only
+  dependency until the `pkg` binary fails. A CommonJS entry that only wraps a
+  dynamic `import()` does not count.
+
+In practice:
 
 - Keep the dual build. Never drop the CommonJS output in `dist/cjs/` or make it
   depend on ESM-only code.
 - Do not add runtime dependencies that are pure ESM (ESM-only, no CommonJS
   entry point) or that themselves depend on pure-ESM packages.
-- Before adding or upgrading a runtime dependency, verify it still works under
-  `pkg`. If an upgrade goes ESM-only, pin it back in `.ncurc.cjs` with a comment.
-  `test/package/package-test.ts` checks that every runtime dependency still loads
-  with `require()`.
+- Check with `npm run test:cjs` (`test/cjs-smoke.cjs`: requires the CommonJS
+  build with require(esm) off, starts a server and delivers a message to it
+  through Nodemailer). Run it after `npm run update` or any dependency change; CI
+  runs it on Node 22 and 24. `test/package/package-test.ts` also requires each
+  direct runtime dependency, but under tsx with require(esm) available, so it
+  is not the guard.
+- If an upgrade goes ESM-only, pin the last CommonJS major in `.ncurc.cjs`
+  (`reject`, or a `target` of `minor`/`patch`) with a comment giving the reason.
 - Dev/test-only dependencies are not bundled by `pkg`, so ESM there is fine.
 
 ## Code Style Rules
@@ -217,7 +233,8 @@ executables, this package and everything it pulls in at runtime must stay
 ## CI / Code Quality
 
 - `.github/workflows/test.yml` - lint, format check and the test suite on
-  maintained Node lines (currently 20.x, 22.x and 24.x, coverage on 24.x), plus Bun.
+  maintained Node lines (currently 20.x, 22.x and 24.x, coverage on 24.x,
+  `npm run test:cjs` on 22.x and 24.x), plus Bun.
 - `.github/workflows/release.yaml` - release-please + npm publish (Node 24).
 - `.github/workflows/stale.yml` - stale issue/PR housekeeping.
 - There is no CodeQL workflow (it was removed in July 2026) and code scanning
