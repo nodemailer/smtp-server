@@ -295,6 +295,14 @@ export interface SMTPServerOptions extends tls.TlsOptions, net.ServerOpts {
      */
     hideSize?: boolean | undefined;
     /**
+     * If true, a message that went over the `size` limit is answered with
+     * `552 Error: message exceeds fixed maximum message size` (enhanced status code 5.3.4)
+     * regardless of what the onData callback reports. onData still receives the whole
+     * message stream. Defaults to false, which leaves the decision to onData
+     * (check `stream.sizeExceeded`). Has no effect without `size`
+     */
+    rejectOversized?: boolean | undefined;
+    /**
      * optional array of allowed authentication methods, defaults to ['PLAIN', 'LOGIN'].
      * Only the methods listed in this array are allowed,
      * so if you set it to ['XOAUTH2'] then PLAIN and LOGIN are not available.

@@ -1302,6 +1302,18 @@ export class SMTPConnection extends EventEmitter {
     }
 
     /**
+     * Checks if a received message has to be refused for its size, which is the case only
+     * when the rejectOversized option is set and the message went over the size limit
+     *
+     * @param dataBytes Number of message bytes received
+     * @returns true if the message has to be answered with 552
+     */
+    _isOversized(dataBytes: number): boolean {
+        let size = Number(this._server.options.size) || 0;
+        return !!this._server.options.rejectOversized && size > 0 && dataBytes > size;
+    }
+
+    /**
      * Checks that a command is available and is not listed in the disabled commands array
      *
      * @param command Command name
@@ -2496,7 +2508,25 @@ export class SMTPConnection extends EventEmitter {
             // the transaction is over, the connection no longer waits for the onData handler
             this._dataStream = false;
 
-            if (err) {
+            if (this._isOversized(parser.dataBytes)) {
+                // the server is configured to refuse a message over the limit whatever onData
+                // decided about it, once for every recipient when using LMTP
+                this._server.logger.info(
+                    {
+                        tnx: 'data',
+                        cid: this.id,
+                        bytes: parser.dataBytes,
+                        size: this._server.options.size
+                    },
+                    'Rejected message of %s bytes, the limit is %s bytes',
+                    parser.dataBytes,
+                    this._server.options.size
+                );
+                let replies = this._server.options.lmtp ? this.session.envelope.rcptTo.length : 1;
+                for (i = 0; i < replies; i++) {
+                    this.send(552, 'Error: message exceeds fixed maximum message size ' + this._server.options.size, 'MESSAGE_TOO_BIG');
+                }
+            } else if (err) {
                 if (this._server.options.lmtp) {
                     // separate error response for every recipient when using LMTP
                     for (i = 0, len = this.session.envelope.rcptTo.length; i < len; i++) {

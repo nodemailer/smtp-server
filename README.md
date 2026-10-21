@@ -26,7 +26,7 @@ The `smtp-server/lib/*` deep imports (for example `require('smtp-server/lib/smtp
 
 ## Using the SIZE extension
 
-Set the `size` option to advertise a maximum message size to clients. Declared sizes in `MAIL FROM:<addr> SIZE=nnn` parameters are checked against the limit, but the actual transfer size is not enforced by the server itself — message data is streamed to the application, so it is up to the application to decide what to do with an oversized message. Check `stream.sizeExceeded` in your `onData` handler to detect oversized messages:
+Set the `size` option to advertise a maximum message size to clients. Declared sizes in `MAIL FROM:<addr> SIZE=nnn` parameters are checked against the limit, but by default the actual transfer size is not enforced by the server itself. Message data is streamed to the application, so it is up to the application to decide what to do with an oversized message (or to set `rejectOversized`, see below). Check `stream.sizeExceeded` in your `onData` handler to detect oversized messages:
 
 ```js
 const server = new SMTPServer({
@@ -46,6 +46,19 @@ const server = new SMTPServer({
 ```
 
 The `sizeExceeded` flag and the `byteLength` byte counter on the data stream are updated in real time while the message is being received, so a handler that wants to stop an oversized transfer early can also check the flag from a `data` event instead of waiting for `end`.
+
+To have the server refuse oversized messages itself, set `rejectOversized: true`. A message that went over the `size` limit is then answered with `552 Error: message exceeds fixed maximum message size` (enhanced status code `5.3.4`, one reply per recipient with LMTP), whatever the `onData` callback reports. `onData` still receives the whole stream and still has to consume it. The option defaults to `false` and has no effect without `size`; it also applies when the limit is hidden with `hideSize`.
+
+```js
+const server = new SMTPServer({
+    size: 1024 * 1024,
+    rejectOversized: true,
+    onData(stream, session, callback) {
+        stream.pipe(storage);
+        stream.on('end', () => callback(null, 'OK')); // a 552 replaces this reply if the message was too large
+    }
+});
+```
 
 ## Trusting XCLIENT and XFORWARD
 
