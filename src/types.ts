@@ -224,6 +224,13 @@ export interface SMTPServerSession {
      * true after the sendmail WIZ command
      */
     isWizard?: boolean | undefined;
+    /**
+     * Disabled commands for this session only. Not set by the server: when application
+     * code (eg. onConnect) sets it to an array, it replaces the server wide
+     * `disabledCommands` option for this connection, both for accepting commands and for
+     * the EHLO capability list. Command names are case insensitive
+     */
+    disabledCommands?: string[] | undefined;
 }
 
 export interface SMTPServerDataStream extends PassThrough {

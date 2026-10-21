@@ -1314,14 +1314,31 @@ export class SMTPConnection extends EventEmitter {
     }
 
     /**
-     * Checks that a command is available and is not listed in the disabled commands array
+     * Checks that a command is available and is not listed in the disabled commands array.
+     * A session.disabledCommands array set by the application (eg. in onConnect) replaces
+     * the server wide disabledCommands option for that session
      *
      * @param command Command name
      * @returns Returns true if the command can be used
      */
     _isSupported(command: string): boolean {
         command = (command || '').toString().trim().toUpperCase();
-        return !this._server.options.disabledCommands.includes(command) && typeof this._getHandler(command) === 'function';
+        return !this._isDisabled(command) && typeof this._getHandler(command) === 'function';
+    }
+
+    /**
+     * Checks if a command is disabled for this session
+     *
+     * @param command Upper case command name
+     * @returns true if the command is listed in the session or the server disabled commands
+     */
+    _isDisabled(command: string): boolean {
+        let sessionDisabled: unknown = this.session.disabledCommands;
+        if (Array.isArray(sessionDisabled)) {
+            // set by application code, so the entries are not normalized
+            return sessionDisabled.some(entry => (entry || '').toString().trim().toUpperCase() === command);
+        }
+        return this._server.options.disabledCommands.includes(command);
     }
 
     /**

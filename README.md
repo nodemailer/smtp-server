@@ -73,6 +73,22 @@ const server = new SMTPServer({
 
 Other clients do not see the commands in the EHLO response and get a `550` reply if they try them anyway. `useProxy` takes the same `true` or array value for the PROXY protocol header.
 
+## Disabling commands per session
+
+The `disabledCommands` option applies to every connection. To decide per connection, set `session.disabledCommands` to an array of command names in `onConnect` (or any later handler). When it is set, it replaces the server wide list for that session, both for the commands the client may use and for the EHLO capability list, so for example `AUTH` and `STARTTLS` are not advertised when the session disables them. Command names are case insensitive, and setting the property back to `undefined` returns the session to the server wide list. Changing `server.options.disabledCommands` from a handler instead affects every open connection.
+
+```js
+const server = new SMTPServer({
+    disabledCommands: ['AUTH'],
+    onConnect(session, callback) {
+        if (isTrustedNetwork(session.remoteAddress)) {
+            session.disabledCommands = []; // offer AUTH to this client only
+        }
+        callback();
+    }
+});
+```
+
 ## Limiting the number of recipients
 
 By default a mail transaction can have any number of recipients. Set `maxRecipients` to cap the count. Once the limit is reached, further `RCPT TO` commands are answered with `452 Error: too many recipients` (enhanced status code `4.5.3`) as RFC 5321 section 4.5.3.1.10 prescribes, and the client can continue to `DATA` with the recipients that were accepted. A recipient that was already accepted does not count again.
