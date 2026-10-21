@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.21.0](https://github.com/nodemailer/smtp-server/compare/v3.20.2...v3.21.0) (2026-10-21)
+
+
+### Features
+
+* add rejectOversized option to answer oversized messages with 552 ([afb7047](https://github.com/nodemailer/smtp-server/commit/afb70473a5b80d3fb105bfcdf5b0a409f18a77f2))
+* allow disabling commands per session with session.disabledCommands ([7f0635f](https://github.com/nodemailer/smtp-server/commit/7f0635f4b70c5f0951a76567c620125977359aeb))
+
 ## [3.20.2](https://github.com/nodemailer/smtp-server/compare/v3.20.1...v3.20.2) (2026-10-18)
 
 
