@@ -1,6 +1,6 @@
 {
     "name": "smtp-server",
-    "version": "3.21.2",
+    "version": "3.21.3",
     "description": "Create custom SMTP servers on the fly",
     "type": "module",
     "main": "./dist/cjs/smtp-server.js",
