@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.3](https://github.com/nodemailer/smtp-server/compare/v3.21.2...v3.21.3) (2026-10-29)
+
+
+### Bug Fixes
+
+* update dependencies ([2b0e2bc](https://github.com/nodemailer/smtp-server/commit/2b0e2bc3afe0a6f40531ff6da3399c342acdee97))
+
 ## [3.21.2](https://github.com/nodemailer/smtp-server/compare/v3.21.1...v3.21.2) (2026-10-29)
 
 
