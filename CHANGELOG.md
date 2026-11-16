@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.21.6](https://github.com/nodemailer/smtp-server/compare/v3.21.5...v3.21.6) (2026-11-16)
+
+
+### Bug Fixes
+
+* format IPv6 addresses in-house instead of with ipv6-normalize ([e9793c7](https://github.com/nodemailer/smtp-server/commit/e9793c78579b616f8d238df14b51f5f5686c7fff))
+
 ## [3.21.5](https://github.com/nodemailer/smtp-server/compare/v3.21.4...v3.21.5) (2026-11-15)
 
 
