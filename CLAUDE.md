@@ -33,7 +33,9 @@ Homepage and documentation: <https://nodemailer.com/extras/smtp-server/>
   declarations: keep code written against those compiling (names, field types,
   handler signatures declared with method syntax so handler parameters may be
   subtypes).
-- `src/vendor-types.d.ts` - Ambient declarations for `ipv6-normalize` and `punycode.js`.
+- `src/ipv6-normalize.ts` - RFC 5952 text form of an IPv6 address (`normalizeIPv6()`), in-house
+  replacement for the `ipv6-normalize` package, which was unchanged since 2015.
+- `src/vendor-types.d.ts` - Ambient declarations for `punycode.js`.
 - `scripts/build.js` - Compiles `src/` with `tsc` twice (`tsconfig.esm.json`,
   `tsconfig.cjs.json`), writes a module-format `package.json` into each output
   directory, and rewrites CommonJS modules that only have a default export so
@@ -58,7 +60,7 @@ Homepage and documentation: <https://nodemailer.com/extras/smtp-server/>
   `exactOptionalPropertyTypes`, `noImplicitOverride`, `erasableSyntaxOnly`,
   `isolatedModules`), compiled twice from the same sources
 - **Runtime dependencies**: `nodemailer/lib/shared` (logging/helpers),
-  `punycode.js` (IDN handling), `ipv6-normalize`
+  `punycode.js` (IDN handling)
 - **Dev/test**: Node.js test runner via `tsx`, c8, ESLint with typescript-eslint,
   Prettier, `pem` (test certificates)
 

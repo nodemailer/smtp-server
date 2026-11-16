@@ -416,6 +416,18 @@ describe('Protocol', () => {
             assertDeepIncludes(sessions[1], { remoteAddress: '198.51.100.7', remotePort: 4321 });
         });
 
+        it('should normalize IPv6 addresses from XCLIENT and in address literals', async () => {
+            let sessions: any[] = [];
+            let onMailFrom = (address: any, session: any, callback: any) => {
+                sessions.push({ remoteAddress: session.remoteAddress, mailFrom: address.address });
+                callback();
+            };
+            await withServer(Object.assign({ onMailFrom }, XCLIENT), ({ port }) =>
+                chat(port, ['XCLIENT ADDR=IPV6:2001:DB8:0:0:0:0:0:1', 'EHLO client.example.com', 'MAIL FROM:<sender@[IPv6:2001:DB8:0:0:1:0:0:1]>'])
+            );
+            assert.deepStrictEqual(sessions, [{ remoteAddress: '2001:db8::1', mailFrom: 'sender@[IPv6:2001:db8::1:0:0:1]' }]);
+        });
+
         it('should keep the XCLIENT address if XFORWARD is attempted afterwards', async () => {
             let sessions = await sessionsOnMail(
                 ['XCLIENT ADDR=198.51.100.7', 'XFORWARD ADDR=192.0.2.66', 'EHLO client.example.com', MAIL],

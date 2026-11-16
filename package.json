@@ -60,7 +60,6 @@
     "author": "Andris Reinman",
     "license": "MIT-0",
     "dependencies": {
-        "ipv6-normalize": "1.0.1",
         "nodemailer": "10.6.0",
         "punycode.js": "2.3.1"
     },

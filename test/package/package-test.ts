@@ -139,7 +139,6 @@ describe('Built package', { timeout: 60 * 1000, skip: hasDist ? false : 'dist/ i
         }
         assert.strictEqual(typeof require('nodemailer/lib/shared').getLogger, 'function');
         assert.strictEqual(typeof require('punycode.js').toUnicode, 'function');
-        assert.strictEqual(typeof require('ipv6-normalize'), 'function');
     });
 
     describe('CommonJS build', () => {

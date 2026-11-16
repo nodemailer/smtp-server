@@ -4,10 +4,10 @@ import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import os from 'node:os';
 import tls from 'node:tls';
-import ipv6normalize from 'ipv6-normalize';
 import punycode from 'punycode.js';
 import sasl, { type SASLMechanism } from './sasl.js';
 import type { SMTPServer } from './smtp-server.js';
+import { normalizeIPv6 } from './ipv6-normalize.js';
 import { SMTPStream } from './smtp-stream.js';
 import type {
     SMTPServerAddress,
@@ -196,7 +196,7 @@ function normalizeAddress(rawAddress: string | null | undefined): string {
         .trim()
         .replace(/^::ffff:/i, '');
     if (address && net.isIPv6(address)) {
-        address = ipv6normalize(address);
+        address = normalizeIPv6(address);
     }
     return address.toLowerCase();
 }
@@ -319,7 +319,7 @@ function parseProxyParameters(
             }
 
             if (net.isIPv6(value)) {
-                value = ipv6normalize(value);
+                value = normalizeIPv6(value);
             }
         }
 
@@ -1541,7 +1541,7 @@ export class SMTPConnection extends EventEmitter {
                                 isValidIP = true;
                                 // Normalize IPv6 address
                                 try {
-                                    ipv6Addr = ipv6normalize(ipv6Addr);
+                                    ipv6Addr = normalizeIPv6(ipv6Addr);
                                     domain = '[IPv6:' + ipv6Addr + ']';
                                 } catch {
                                     // Keep original if normalization fails
